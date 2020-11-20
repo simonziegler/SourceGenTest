@@ -1,0 +1,3 @@
+- name: Partition Key Strategy
+  topicUid: A.PartitionKeyStrategy
+
