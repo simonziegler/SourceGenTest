@@ -1,13 +1,11 @@
-﻿using System;
-
-namespace Vectis.Events
+﻿namespace Vectis.Events
 {
     /// <summary>
-    /// Holds the data associated with a property update.
+    /// Holds the data associated with a property update. Values are held as string to be
+    /// converted to relevant values by the receiving object.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
     [MessagePack.MessagePackObject]
-    public record UpdatePropertyEvent<T> : Event
+    public record UpdatePropertyEvent : Event
     {
         /// <summary>
         /// The id of the object to be updated by this event.
@@ -27,14 +25,14 @@ namespace Vectis.Events
         /// Value of the property before being updated.
         /// </summary>
         [MessagePack.Key(6)]
-        public T PreviousValue { get; init; }
+        public string PreviousValue { get; init; }
 
 
         /// <summary>
         /// Value of the property after being updated.
         /// </summary>
         [MessagePack.Key(7)]
-        public T NextValue { get; init; }
+        public string NextValue { get; init; }
 
 
         /// <summary>

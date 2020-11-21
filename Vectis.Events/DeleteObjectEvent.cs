@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Vectis.Events
+﻿namespace Vectis.Events
 {
     /// <summary>
     /// An event that deletes the specified object.

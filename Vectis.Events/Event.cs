@@ -5,7 +5,7 @@ namespace Vectis.Events
     /// <summary>
     /// A general purpose event base class.
     /// </summary>
-    [MessagePack.Union(0, typeof(UpdatePropertyEvent<string>))]
+    [MessagePack.Union(0, typeof(UpdatePropertyEvent))]
     public abstract record Event
     {
         /// <summary>
