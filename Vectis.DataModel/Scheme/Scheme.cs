@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using AutoNotify;
 
 namespace Vectis.DataModel
 {
@@ -11,14 +12,18 @@ namespace Vectis.DataModel
     /// </summary>
     [MessagePack.MessagePackObject]
     [TypeDiscriminator("Development Scheme")]
-    public class Scheme : VectisBase
+    public partial class Scheme : VectisBase
     {
         /// <summary>
         /// The value assigned to all scheme partition keys.
         /// </summary>
         public const string SchemePartitionKeyValue = "Scheme";
 
-        
+        /// <summary>
+        /// Some property.
+        /// </summary>
+        [AutoNotify]
+        private string qwer = "";
 
 
 

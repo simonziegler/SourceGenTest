@@ -1,6 +1,7 @@
 ﻿@page "/fetchdata"
 
 @using SourceGenTest.Data
+@using Vectis.DataModel 
 @inject WeatherForecastService ForecastService
 
 <h1>Weather forecast</h1>
@@ -38,9 +39,11 @@ else
 
 @code {
     private WeatherForecast[] forecasts;
+    private Scheme scheme = new Scheme();
 
     protected override async Task OnInitializedAsync()
     {
         forecasts = await ForecastService.GetForecastAsync(DateTime.Now);
+        var x = scheme.Test;
     }
 }

@@ -1,14 +1,13 @@
-﻿using System;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
-namespace SourceGeneratorSamples
+namespace MyGenerator
 {
     [Generator]
     public class AutoNotifyGenerator : ISourceGenerator
@@ -105,7 +104,9 @@ namespace {namespaceName}
                 ProcessField(source, fieldSymbol, attributeSymbol);
             }
 
-            source.Append("} }");
+            source.Append(@"
+    }
+}");
             return source.ToString();
         }
 
@@ -119,31 +120,33 @@ namespace {namespaceName}
             AttributeData attributeData = fieldSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
             TypedConstant overridenNameOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "PropertyName").Value;
 
-            string propertyName = chooseName(fieldName, overridenNameOpt);
+            string propertyName = chooseName();
             if (propertyName.Length == 0 || propertyName == fieldName)
             {
                 //TODO: issue a diagnostic that we can't process this field
                 return;
             }
+            //
 
             source.Append($@"
-public {fieldType} {propertyName} 
-{{
-    get 
-    {{
-        return this.{fieldName};
-    }}
+        /// <inheritdoc cref=""{fieldName}"" />
+        public {fieldType} {propertyName} 
+        {{
+            get 
+            {{
+                return this.{fieldName} + ""hello"";
+            }}
 
-    set
-    {{
-        this.{fieldName} = value;
-        this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));
-    }}
-}}
+            set
+            {{
+                this.{fieldName} = value;
+                this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));
+            }}
+        }}
 
 ");
 
-            string chooseName(string fieldName, TypedConstant overridenNameOpt)
+            string chooseName()
             {
                 if (!overridenNameOpt.IsNull)
                 {
