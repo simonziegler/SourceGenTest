@@ -25,6 +25,9 @@ namespace Vectis.DataModel
         [AutoNotify]
         private string qwer = "";
 
+        [AutoNotify]
+        private string simon;
+
 
 
         private string name;

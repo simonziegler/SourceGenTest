@@ -85,17 +85,16 @@ namespace AutoNotify
             string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
             // begin building the generated source
-            StringBuilder source = new StringBuilder($@"
-namespace {namespaceName}
-{{
-    public partial class {classSymbol.Name} : {notifySymbol.ToDisplayString()}
-    {{
-");
+            StringBuilder source = new StringBuilder();
+            source.AppendLineIndented(0, $"namespace {namespaceName}");
+            source.AppendLineIndented(0, "{");
+            source.AppendLineIndented(1, $"public partial class {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, "{");
 
             // if the class doesn't implement INotifyPropertyChanged already, add it
             if (!classSymbol.Interfaces.Contains(notifySymbol))
             {
-                source.Append("public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
+                source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
             }
 
             // create properties for each field 
@@ -104,9 +103,9 @@ namespace {namespaceName}
                 ProcessField(source, fieldSymbol, attributeSymbol);
             }
 
-            source.Append(@"
-    }
-}");
+            source.AppendLineIndented(1, "}");
+            source.AppendLineIndented(0, "}");
+            
             return source.ToString();
         }
 
@@ -120,33 +119,26 @@ namespace {namespaceName}
             AttributeData attributeData = fieldSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
             TypedConstant overridenNameOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "PropertyName").Value;
 
-            string propertyName = chooseName();
+            string propertyName = ChooseName();
             if (propertyName.Length == 0 || propertyName == fieldName)
             {
                 //TODO: issue a diagnostic that we can't process this field
                 return;
             }
-            //
 
-            source.Append($@"
-        /// <inheritdoc cref=""{fieldName}"" />
-        public {fieldType} {propertyName} 
-        {{
-            get 
-            {{
-                return this.{fieldName} + ""hello"";
-            }}
+            source.AppendLineIndented(2, "");
+            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{fieldName}\" />");
+            source.AppendLineIndented(2, $"public {fieldType} {propertyName}");
+            source.AppendLineIndented(2, "{");
+            source.AppendLineIndented(3, $"get => this.{fieldName};");
+            source.AppendLineIndented(3, "set");
+            source.AppendLineIndented(3, "{");
+            source.AppendLineIndented(4, $"this.{fieldName} = value;");
+            source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));");
+            source.AppendLineIndented(3, "}");
+            source.AppendLineIndented(2, "}");
 
-            set
-            {{
-                this.{fieldName} = value;
-                this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));
-            }}
-        }}
-
-");
-
-            string chooseName()
+            string ChooseName()
             {
                 if (!overridenNameOpt.IsNull)
                 {
@@ -162,7 +154,6 @@ namespace {namespaceName}
 
                 return fieldName.Substring(0, 1).ToUpper() + fieldName.Substring(1);
             }
-
         }
 
         /// <summary>
@@ -184,6 +175,23 @@ namespace {namespaceName}
                     CandidateFields.Add(fieldDeclarationSyntax);
                 }
             }
+        }
+    }
+}
+
+namespace System.Text
+{
+    public static class Extensions
+    {
+        /// <inheritdoc cref="System.Text.StringBuilder.AppendLine(string)"/>
+        /// <remarks>Indents the provided value by the specified number of four space indents.</remarks>
+        public static StringBuilder AppendLineIndented(this StringBuilder source, int numIndents, string value)
+        {
+            const string singleIndent = "    ";
+
+            var indent = new StringBuilder(singleIndent.Length * numIndents).Insert(0, singleIndent, numIndents).ToString();
+
+            return source.AppendLine(indent + value);
         }
     }
 }
