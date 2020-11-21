@@ -68,9 +68,6 @@ namespace EventTest
                 new() { PropertyName = "Location", Value = "London" },
             };
 
-            var list = ImmutableList<CreateObjectEvent.PropertyValuePair>.Empty;
-            list = list.AddRange(properties);
-
             CreateObjectEvent create1 = new()
             {
                 PartitionKey = "pk",
@@ -81,7 +78,6 @@ namespace EventTest
                 ObjectId = "object id",
                 Properties = properties
             };
-
 
             jsonNS = Newtonsoft.Json.JsonConvert.SerializeObject(create1);
             jsonSTJ = System.Text.Json.JsonSerializer.Serialize(create1);
