@@ -95,7 +95,8 @@ namespace EventTest
             //_ = runner;
 
             var scheme = new SchemeRecord();
-
+            var notifier = new SchemeRecordViewNotifier();
+            //var x = scheme.MyProperty;
             var test = scheme;
         }
     }

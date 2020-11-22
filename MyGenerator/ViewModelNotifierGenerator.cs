@@ -13,19 +13,26 @@ namespace MyGenerator
     [Generator]
     public class ViewModelNotifierGenerator : ISourceGenerator
     {
-        private const string attributeText = @"
+        /// <summary>
+        /// Tjhe name of the attribute used by this generator
+        /// </summary>
+        public const string AttributeName = "ViewModel";
+        
+        private static readonly string attributeText = $@"
 using System;
 namespace Vectis.Generator
-{
+{{
+    /// <summary>
+    /// Causes the vectis source generator to mark this as a property to include in a notifier to emit update events.
+    /// </summary>
     [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
-    sealed class SimonAttribute : Attribute
-    {
-        public SimonAttribute()
-        {
-        }
-        public string PropertyName { get; set; }
-    }
-}
+    public sealed class {AttributeName}Attribute : Attribute
+    {{
+        public string PropertyName {{ get; set; }}
+        
+        public {AttributeName}Attribute() {{ }}
+    }}
+}}
 ";
 
         public void Initialize(GeneratorInitializationContext context)
@@ -44,14 +51,11 @@ namespace Vectis.Generator
         public void Execute(GeneratorExecutionContext context)
         {
             // add the attribute text
-            context.AddSource("SimonAttribute", attributeText);
+            context.AddSource($"{AttributeName}Attribute", attributeText);
 
             // retreive the populated receiver 
             if (!(context.SyntaxReceiver is SyntaxReceiver receiver))
-            {
-                Console.WriteLine("receiver isn't receiver");
                 return;
-            }
 
             // we're going to create a new compilation that contains the attribute.
             // TODO: we should allow source generators to provide source during initialize, so that this step isn't required.
@@ -59,35 +63,28 @@ namespace Vectis.Generator
             Compilation compilation = context.Compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(SourceText.From(attributeText, Encoding.UTF8), options));
 
             // get the newly bound attribute, and INotifyPropertyChanged
-            INamedTypeSymbol attributeSymbol = compilation.GetTypeByMetadataName("Vectis.Generator.SimonAttribute");
+            INamedTypeSymbol attributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{AttributeName}Attribute");
             INamedTypeSymbol notifySymbol = compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
 
-            // loop over the candidate fields, and keep the ones that are actually annotated
-            List<IFieldSymbol> fieldSymbols = new List<IFieldSymbol>();
-            foreach (FieldDeclarationSyntax field in receiver.CandidateFields)
+            List<IPropertySymbol> propertySymbols = new List<IPropertySymbol>();
+            foreach (PropertyDeclarationSyntax property in receiver.CandidateProperties)
             {
-                SemanticModel model = compilation.GetSemanticModel(field.SyntaxTree);
-                foreach (VariableDeclaratorSyntax variable in field.Declaration.Variables)
-                {
-                    // Get the symbol being decleared by the field, and keep it if its annotated
-                    IFieldSymbol fieldSymbol = model.GetDeclaredSymbol(variable) as IFieldSymbol;
-                    if (fieldSymbol.GetAttributes().Any(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default)))
-                    {
-                        fieldSymbols.Add(fieldSymbol);
-                    }
-                }
+                SemanticModel model = compilation.GetSemanticModel(property.SyntaxTree);
+                IPropertySymbol propertySymbol = model.GetDeclaredSymbol(property) as IPropertySymbol;
+                propertySymbols.Add(propertySymbol);
             }
 
             // group the fields by class, and generate the source
-            foreach (IGrouping<INamedTypeSymbol, IFieldSymbol> group in fieldSymbols.GroupBy(f => f.ContainingType))
+            foreach (var group in propertySymbols.GroupBy(f => f.ContainingType))
             {
                 string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, context);
-                context.AddSource($"{group.Key.Name}_Notifier.cs", classSource);
+                context.AddSource($"{GetNotifierClassName(group.Key.Name)}.cs", classSource);
             }
         }
 
-        private string ProcessClass(INamedTypeSymbol classSymbol, List<IFieldSymbol> fields, ISymbol attributeSymbol, ISymbol notifySymbol, GeneratorExecutionContext context)
+        private string ProcessClass(INamedTypeSymbol classSymbol, List<IPropertySymbol> properties, ISymbol attributeSymbol, ISymbol notifySymbol, GeneratorExecutionContext context)
         {
+            //return null;
             if (!classSymbol.ContainingSymbol.Equals(classSymbol.ContainingNamespace, SymbolEqualityComparer.Default))
             {
                 return null; //TODO: issue a diagnostic that it must be top level
@@ -99,23 +96,20 @@ namespace Vectis.Generator
             StringBuilder source = new StringBuilder();
             source.AppendLineIndented(0, $"namespace {namespaceName}");
             source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, $"public partial record {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, $"public class {GetNotifierClassName(classSymbol.Name)} : {notifySymbol.ToDisplayString()}");
             source.AppendLineIndented(1, "{");
 
             // if the class doesn't implement INotifyPropertyChanged already, add it
-            //if (!classSymbol.Interfaces.Contains(notifySymbol))
-            //{
-                source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
-            //}
-
-            // create properties for each field 
-            foreach (IFieldSymbol fieldSymbol in fields)
+            if (!classSymbol.Interfaces.Contains(notifySymbol))
             {
-                ProcessField(source, fieldSymbol, attributeSymbol);
+                source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
             }
 
-            source.AppendLineIndented(2, "[MessagePack.IgnoreMember]");
-            source.AppendLineIndented(2, "public string Stuff => \"stuff\";");
+            // create properties for each field 
+            foreach (var propertySymbol in properties)
+            {
+                ProcessProperty(source, classSymbol.Name, propertySymbol, attributeSymbol);
+            }
 
             source.AppendLineIndented(1, "}");
             source.AppendLineIndented(0, "}");
@@ -123,14 +117,14 @@ namespace Vectis.Generator
             return source.ToString();
         }
 
-        private void ProcessField(StringBuilder source, IFieldSymbol fieldSymbol, ISymbol attributeSymbol)
+        private void ProcessProperty(StringBuilder source, string recordName, IPropertySymbol propertySymbol, ISymbol attributeSymbol)
         {
             // get the name and type of the field
-            string fieldName = fieldSymbol.Name;
-            ITypeSymbol fieldType = fieldSymbol.Type;
+            string fieldName = propertySymbol.Name;
+            ITypeSymbol fieldType = propertySymbol.Type;
 
-            // get the AutoNotify attribute from the field, and any associated data
-            AttributeData attributeData = fieldSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
+            // get the ViewModel attribute from the field, and any associated data
+            AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
             TypedConstant overridenNameOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "PropertyName").Value;
 
             string propertyName = ChooseName();
@@ -141,11 +135,12 @@ namespace Vectis.Generator
             }
 
             source.AppendLineIndented(2, "");
-            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{fieldName}\" />");
+            source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
+            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{fieldName}\" />");
             source.AppendLineIndented(2, $"public {fieldType} {propertyName}");
             source.AppendLineIndented(2, "{");
             source.AppendLineIndented(3, $"get => this.{fieldName};");
-            source.AppendLineIndented(3, "set");
+            source.AppendLineIndented(3, "init //hello");
             source.AppendLineIndented(3, "{");
             source.AppendLineIndented(4, $"this.{fieldName} = value;");
             source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));");
@@ -175,7 +170,7 @@ namespace Vectis.Generator
         /// </summary>
         class SyntaxReceiver : ISyntaxReceiver
         {
-            public List<FieldDeclarationSyntax> CandidateFields { get; } = new List<FieldDeclarationSyntax>();
+            public List<PropertyDeclarationSyntax> CandidateProperties { get; } = new List<PropertyDeclarationSyntax>();
 
             /// <summary>
             /// Called for every syntax node in the compilation, we can inspect the nodes and save any information useful for generation
@@ -183,13 +178,21 @@ namespace Vectis.Generator
             public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
             {
                 // any field with at least one attribute is a candidate for property generation
-                if (syntaxNode is FieldDeclarationSyntax fieldDeclarationSyntax
-                    && fieldDeclarationSyntax.AttributeLists.Count > 0)
+                if (syntaxNode is PropertyDeclarationSyntax propertyDeclarationSyntax
+                    && propertyDeclarationSyntax.AttributeLists.Where(al => al.ToString() == $"[{AttributeName}]").Any())
                 {
-                    CandidateFields.Add(fieldDeclarationSyntax);
+                    CandidateProperties.Add(propertyDeclarationSyntax);
                 }
             }
         }
+
+
+        /// <summary>
+        /// Returns the class name for the view notifier associated with a view model record.
+        /// </summary>
+        /// <param name="recordName"></param>
+        /// <returns></returns>
+        public static string GetNotifierClassName(string recordName) => recordName + "ViewNotifier";
     }
 }
 

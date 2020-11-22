@@ -19,10 +19,10 @@
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!--<ItemGroup>
     <ProjectReference Include="..\MyGenerator\MyGenerator.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer" />
-  </ItemGroup>
+  </ItemGroup>-->
 
 </Project>
