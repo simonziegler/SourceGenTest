@@ -94,10 +94,21 @@ namespace EventTest
 
             //_ = runner;
 
-            var scheme = new SchemeRecord();
-            var notifier = new SchemeRecordViewNotifier();
-            //var x = scheme.MyProperty;
-            var test = scheme;
+            var record = new SchemeRecord()
+            {
+                Id = "scheme id",
+                Name = "Bournemouth",
+                Description = "A description",
+                BorrowerEntityId = "borrower id",
+                VatReclaimMonths = 1
+            };
+
+            var notifier = new SchemeRecordViewNotifier(record);
+
+            //var x = new ViewModelBaseViewNotifier();
+            _ = notifier.Id;
+            var x = notifier.Name;
+            var test = record;
         }
     }
 }

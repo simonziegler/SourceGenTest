@@ -2,7 +2,7 @@
 
 namespace EventTest
 {
-    public abstract record ViewModelBase
+    public abstract partial record ViewModelBase
     {
         /// <summary>
         /// The scheme's name.

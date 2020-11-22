@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 
 namespace MyGenerator
@@ -17,7 +18,7 @@ namespace MyGenerator
         /// Tjhe name of the attribute used by this generator
         /// </summary>
         public const string AttributeName = "ViewModel";
-        
+        private static int crap = 0;
         private static readonly string attributeText = $@"
 using System;
 namespace Vectis.Generator
@@ -37,7 +38,7 @@ namespace Vectis.Generator
 
         public void Initialize(GeneratorInitializationContext context)
         {
-#if DEBUG
+#if DEBUGx
             if (!Debugger.IsAttached)
             {
                 Debugger.Launch();
@@ -77,8 +78,15 @@ namespace Vectis.Generator
             // group the fields by class, and generate the source
             foreach (var group in propertySymbols.GroupBy(f => f.ContainingType))
             {
-                string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, context);
-                context.AddSource($"{GetNotifierClassName(group.Key.Name)}.cs", classSource);
+                // Respectively the type symbol cannot be abstract, public, a record (established by the presence of an EqualityContract and partial
+                //if (!group.Key.IsAbstract
+                //    && group.Key.DeclaredAccessibility == Accessibility.Public
+                //    && group.Key.GetMembers().Any(x => x.Kind == SymbolKind.Property && x.Name == "EqualityContract" && x.IsImplicitlyDeclared)
+                //    && true)
+                {
+                    string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, context);
+                    context.AddSource($"{GetNotifierClassName(group.Key.Name)}.cs", classSource);
+                }
             }
         }
 
@@ -91,19 +99,47 @@ namespace Vectis.Generator
             }
 
             string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
+            
+            string abstractTag = "";
+
+            if (classSymbol.IsAbstract)
+            {
+                abstractTag = "abstract ";
+            }
+
+            string baseInheritance = "";
+            string baseConstructorCall = "";
+
+            if (classSymbol.BaseType != null && classSymbol.BaseType.ContainingNamespace.Name == classSymbol.ContainingNamespace.Name)
+            {
+                baseInheritance = $"{GetNotifierClassName(classSymbol.BaseType.Name)}, ";
+                baseConstructorCall = " : base(record)";
+            }
 
             // begin building the generated source
             StringBuilder source = new StringBuilder();
             source.AppendLineIndented(0, $"namespace {namespaceName}");
             source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, $"public class {GetNotifierClassName(classSymbol.Name)} : {notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, $"public partial record {classSymbol.Name}");
             source.AppendLineIndented(1, "{");
+            source.AppendLineIndented(2, $"public string Crap{crap++} {{ get; init; }}");
+            source.AppendLineIndented(1, "}");
+            source.AppendLineIndented(1, "");
+            source.AppendLineIndented(1, "");
+            source.AppendLineIndented(1, $"public {abstractTag}class {GetNotifierClassName(classSymbol.Name)} : {baseInheritance}{notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, "{");
+            source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
+            source.AppendLineIndented(2, "");
+            source.AppendLineIndented(2, $"public {GetNotifierClassName(classSymbol.Name)}({classSymbol.Name} record){baseConstructorCall}");
+            source.AppendLineIndented(2, "{");
 
-            // if the class doesn't implement INotifyPropertyChanged already, add it
-            if (!classSymbol.Interfaces.Contains(notifySymbol))
+            foreach (var propertySymbol in properties)
             {
-                source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
+                source.AppendLineIndented(3, $"this.{propertySymbol.Name} = record.{propertySymbol.Name};");
             }
+
+            source.AppendLineIndented(2, "}");
+            source.AppendLineIndented(2, "");
 
             // create properties for each field 
             foreach (var propertySymbol in properties)
@@ -120,49 +156,25 @@ namespace Vectis.Generator
         private void ProcessProperty(StringBuilder source, string recordName, IPropertySymbol propertySymbol, ISymbol attributeSymbol)
         {
             // get the name and type of the field
-            string fieldName = propertySymbol.Name;
             ITypeSymbol fieldType = propertySymbol.Type;
+            var fieldName = "_" + propertySymbol.Name.Substring(0, 1).ToLower() + propertySymbol.Name.Substring(1);
 
             // get the ViewModel attribute from the field, and any associated data
             AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
             TypedConstant overridenNameOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "PropertyName").Value;
 
-            string propertyName = ChooseName();
-            if (propertyName.Length == 0 || propertyName == fieldName)
-            {
-                //TODO: issue a diagnostic that we can't process this field
-                return;
-            }
-
             source.AppendLineIndented(2, "");
             source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
-            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{fieldName}\" />");
-            source.AppendLineIndented(2, $"public {fieldType} {propertyName}");
+            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
+            source.AppendLineIndented(2, $"public {fieldType} {propertySymbol.Name}");
             source.AppendLineIndented(2, "{");
             source.AppendLineIndented(3, $"get => this.{fieldName};");
-            source.AppendLineIndented(3, "init //hello");
+            source.AppendLineIndented(3, "set");
             source.AppendLineIndented(3, "{");
             source.AppendLineIndented(4, $"this.{fieldName} = value;");
-            source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));");
+            source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
             source.AppendLineIndented(3, "}");
             source.AppendLineIndented(2, "}");
-
-            string ChooseName()
-            {
-                if (!overridenNameOpt.IsNull)
-                {
-                    return overridenNameOpt.Value.ToString();
-                }
-
-                fieldName = fieldName.TrimStart('_');
-                if (fieldName.Length == 0)
-                    return string.Empty;
-
-                if (fieldName.Length == 1)
-                    return fieldName.ToUpper();
-
-                return fieldName.Substring(0, 1).ToUpper() + fieldName.Substring(1);
-            }
         }
 
         /// <summary>

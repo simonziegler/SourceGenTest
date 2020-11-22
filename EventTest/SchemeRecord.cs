@@ -39,8 +39,5 @@ namespace EventTest
         [MessagePack.Key(4)]
         [ViewModel]
         public int VatReclaimMonths { get; init; }
-
-
-        public string Crap { get; init; }
     }
 }
