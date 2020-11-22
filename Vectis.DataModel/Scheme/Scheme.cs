@@ -19,15 +19,8 @@ namespace Vectis.DataModel
         /// </summary>
         public const string SchemePartitionKeyValue = "Scheme";
 
-        /// <summary>
-        /// Some property.
-        /// </summary>
         [AutoNotify]
-        private string qwer = "";
-
-        [AutoNotify]
-        private string simon;
-
+        private string blub = "";
 
 
         private string name;

@@ -4,22 +4,23 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
 namespace MyGenerator
 {
     [Generator]
-    public class AutoNotifyGenerator : ISourceGenerator
+    public class ViewModelNotifierGenerator : ISourceGenerator
     {
         private const string attributeText = @"
 using System;
-namespace AutoNotify
+namespace Vectis.Generator
 {
-    [AttributeUsage(AttributeTargets.Field, Inherited = false, AllowMultiple = false)]
-    sealed class AutoNotifyAttribute : Attribute
+    [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
+    sealed class SimonAttribute : Attribute
     {
-        public AutoNotifyAttribute()
+        public SimonAttribute()
         {
         }
         public string PropertyName { get; set; }
@@ -29,6 +30,13 @@ namespace AutoNotify
 
         public void Initialize(GeneratorInitializationContext context)
         {
+#if DEBUG
+            if (!Debugger.IsAttached)
+            {
+                Debugger.Launch();
+            }
+#endif
+
             // Register a syntax receiver that will be created for each generation pass
             context.RegisterForSyntaxNotifications(() => new SyntaxReceiver());
         }
@@ -36,11 +44,14 @@ namespace AutoNotify
         public void Execute(GeneratorExecutionContext context)
         {
             // add the attribute text
-            context.AddSource("AutoNotifyAttribute", attributeText);
+            context.AddSource("SimonAttribute", attributeText);
 
             // retreive the populated receiver 
             if (!(context.SyntaxReceiver is SyntaxReceiver receiver))
+            {
+                Console.WriteLine("receiver isn't receiver");
                 return;
+            }
 
             // we're going to create a new compilation that contains the attribute.
             // TODO: we should allow source generators to provide source during initialize, so that this step isn't required.
@@ -48,7 +59,7 @@ namespace AutoNotify
             Compilation compilation = context.Compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(SourceText.From(attributeText, Encoding.UTF8), options));
 
             // get the newly bound attribute, and INotifyPropertyChanged
-            INamedTypeSymbol attributeSymbol = compilation.GetTypeByMetadataName("AutoNotify.AutoNotifyAttribute");
+            INamedTypeSymbol attributeSymbol = compilation.GetTypeByMetadataName("Vectis.Generator.SimonAttribute");
             INamedTypeSymbol notifySymbol = compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
 
             // loop over the candidate fields, and keep the ones that are actually annotated
@@ -71,7 +82,7 @@ namespace AutoNotify
             foreach (IGrouping<INamedTypeSymbol, IFieldSymbol> group in fieldSymbols.GroupBy(f => f.ContainingType))
             {
                 string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, context);
-                context.AddSource($"{group.Key.Name}_autoNotify.cs", classSource);
+                context.AddSource($"{group.Key.Name}_Notifier.cs", classSource);
             }
         }
 
@@ -88,20 +99,23 @@ namespace AutoNotify
             StringBuilder source = new StringBuilder();
             source.AppendLineIndented(0, $"namespace {namespaceName}");
             source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, $"public partial class {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, $"public partial record {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
             source.AppendLineIndented(1, "{");
 
             // if the class doesn't implement INotifyPropertyChanged already, add it
-            if (!classSymbol.Interfaces.Contains(notifySymbol))
-            {
+            //if (!classSymbol.Interfaces.Contains(notifySymbol))
+            //{
                 source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
-            }
+            //}
 
             // create properties for each field 
             foreach (IFieldSymbol fieldSymbol in fields)
             {
                 ProcessField(source, fieldSymbol, attributeSymbol);
             }
+
+            source.AppendLineIndented(2, "[MessagePack.IgnoreMember]");
+            source.AppendLineIndented(2, "public string Stuff => \"stuff\";");
 
             source.AppendLineIndented(1, "}");
             source.AppendLineIndented(0, "}");
@@ -179,19 +193,3 @@ namespace AutoNotify
     }
 }
 
-namespace System.Text
-{
-    public static class Extensions
-    {
-        /// <inheritdoc cref="System.Text.StringBuilder.AppendLine(string)"/>
-        /// <remarks>Indents the provided value by the specified number of four space indents.</remarks>
-        public static StringBuilder AppendLineIndented(this StringBuilder source, int numIndents, string value)
-        {
-            const string singleIndent = "    ";
-
-            var indent = new StringBuilder(singleIndent.Length * numIndents).Insert(0, singleIndent, numIndents).ToString();
-
-            return source.AppendLine(indent + value);
-        }
-    }
-}

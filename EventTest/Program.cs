@@ -2,8 +2,12 @@
 using MessagePack.Resolvers;
 using System;
 using System.Collections.Immutable;
+using System.Net;
 using System.Text;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Sources;
 using Vectis.Events;
+using Vectis.DataModel;
 
 namespace EventTest
 {
@@ -84,6 +88,15 @@ namespace EventTest
 
             var createNStoSTJ = System.Text.Json.JsonSerializer.Deserialize<CreateObjectEvent>(jsonNS);
             var createSTJtoNS = Newtonsoft.Json.JsonConvert.DeserializeObject<CreateObjectEvent>(jsonSTJ);
+
+            //var runner = new Runner();
+            //runner.Run("");
+
+            //_ = runner;
+
+            var scheme = new SchemeRecord();
+
+            var test = scheme;
         }
     }
 }
