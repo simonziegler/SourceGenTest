@@ -43,25 +43,25 @@ namespace Vectis.Generator
         
         public {ViewModelAttributeName}Attribute() {{ }}
     }}
-}}";
-//    /// <summary>
-//    /// Used to discriminate derived types of the marked class. Not intended to be used for abstract classes.
-//    /// </summary>
-//    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-//    public sealed class {TypeDiscriminatorAttributeName}Attribute : Attribute
-//    {{
-//        /// <summary>
-//        /// Gets the name of the property used to discriminate derived types of the class marked by this attribute.
-//        /// </summary>
-//        public string DiscriminatorString {{ get; set; }}
+    
+    /// <summary>
+    /// Used to discriminate derived types of the marked class. Not intended to be used for abstract classes.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
+    public sealed class {TypeDiscriminatorAttributeName}Attribute : Attribute
+    {{
+        /// <summary>
+        /// Gets the name of the property used to discriminate derived types of the class marked by this attribute.
+        /// </summary>
+        public string DiscriminatorString {{ get; set; }}
         
-//        public {TypeDiscriminatorAttributeName}Attribute(string discriminatorString)
-//        {{
-//            DiscriminatorString = discriminatorString;
-//        }}
-//    }}
-//}}
-//";
+        public {TypeDiscriminatorAttributeName}Attribute(string discriminatorString)
+        {{
+            DiscriminatorString = discriminatorString;
+        }}
+    }}
+}}
+";
 
         public void Initialize(GeneratorInitializationContext context)
         {

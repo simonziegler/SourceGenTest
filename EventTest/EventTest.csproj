@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MyGenerator\MyGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+    <ProjectReference Include="..\Vectis.Events\Vectis.Events.csproj" />
   </ItemGroup>
 
 </Project>
