@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System;
@@ -40,32 +41,25 @@ namespace Vectis.Generator
         /// Used for ids and other immutable data.
         /// </summary>
         public bool ReadOnly {{ get; set; }} = false;
-        
-        public {ViewModelAttributeName}Attribute() {{ }}
     }}
     
     /// <summary>
     /// Used to discriminate derived types of the marked class. Not intended to be used for abstract classes.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-    public sealed class {TypeDiscriminatorAttributeName}Attribute : Attribute
+    public sealed class {TypeDiscriminatorAttributeName}Attribute : System.Attribute
     {{
         /// <summary>
-        /// Gets the name of the property used to discriminate derived types of the class marked by this attribute.
+        /// The name of the property used to discriminate derived types of the class marked by this attribute.
         /// </summary>
-        public string DiscriminatorString {{ get; set; }}
-        
-        public {TypeDiscriminatorAttributeName}Attribute(string discriminatorString)
-        {{
-            DiscriminatorString = discriminatorString;
-        }}
+        public string Discriminator {{ get; set; }}
     }}
 }}
 ";
 
         public void Initialize(GeneratorInitializationContext context)
         {
-#if DEBUGx
+#if DEBUG
             if (!Debugger.IsAttached)
             {
                 Debugger.Launch();
@@ -137,7 +131,7 @@ namespace Vectis.Generator
                     context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
                             "VSG0003",
                             $"{ViewModelAttributeName} can only be used in public records that are decorated with the {TypeDiscriminatorAttributeName} attribute",
-                            $"{ViewModelAttributeName} is reserved for use in public partial records that are decorated with the {TypeDiscriminatorAttributeName} attribute and cannot be used in '{recordSymbol.Name}', which lacks [{TypeDiscriminatorAttributeName}(\"... Some Type Discrimination Text ...\")]",
+                            $"{ViewModelAttributeName} is reserved for use in public partial records that are decorated with the {TypeDiscriminatorAttributeName} attribute and cannot be used in '{recordSymbol.Name}', which lacks [{TypeDiscriminatorAttributeName}(\"... Unique Type Discrimination Text ...\")]",
                             "Vectis Source Generation",
                             DiagnosticSeverity.Error,
                             true
@@ -146,10 +140,24 @@ namespace Vectis.Generator
                     continue;
                 }
 
-                //AttributeData attributeData = recordSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(typeDiscriminatorAttributeSymbol, SymbolEqualityComparer.Default));
-                //TypedConstant discriminatorString = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "DiscriminatorString").Value;
+                var attributeData = recordSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(typeDiscriminatorAttributeSymbol, SymbolEqualityComparer.Default));
+                var discriminator = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "Discriminator").Value.Value.ToString();
 
-                string classSource = ProcessClass(recordSymbol, recordDeclarationSyntax, group.ToList(), viewModelAttributeSymbol, notifySymbol, "DiscriminatorString", context, compilation);
+                if (!modifiers.Contains("abstract") && !recordSymbol.GetAttributes().Any(ad => ad.AttributeClass.Name == typeDiscriminatorAttributeSymbol.Name))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
+                            "VSG0004",
+                            $"{TypeDiscriminatorAttributeName} missing 'Discriminator' value",
+                            $"{TypeDiscriminatorAttributeName} requires a value for the 'Discriminator' property in '{recordSymbol.Name}', e.g. [{TypeDiscriminatorAttributeName}(\"... Unique Type Discrimination Text ...\")]",
+                            "Vectis Source Generation",
+                            DiagnosticSeverity.Error,
+                            true
+                        ), Location.None));
+
+                    continue;
+                }
+
+                string classSource = ProcessClass(recordSymbol, recordDeclarationSyntax, group.ToList(), viewModelAttributeSymbol, notifySymbol, discriminator, context, compilation);
                 context.AddSource($"{GetNotifierClassName(recordSymbol.Name)}.cs", classSource);
             }
         }
