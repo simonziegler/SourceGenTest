@@ -2,7 +2,11 @@
 
 namespace EventTest
 {
+    /// <summary>
+    /// A scheme record
+    /// </summary>
     [MessagePack.MessagePackObject]
+    [ZTypeDiscriminator("Scheme Record")]
     public partial record SchemeRecord : ViewModelBase
     {
         /// <summary>

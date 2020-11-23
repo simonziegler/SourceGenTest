@@ -1,13 +1,8 @@
 ﻿using MessagePack;
 using MessagePack.Resolvers;
 using System;
-using System.Collections.Immutable;
-using System.Net;
 using System.Text;
-using System.Threading.Tasks;
-using System.Threading.Tasks.Sources;
 using Vectis.Events;
-using Vectis.DataModel;
 
 namespace EventTest
 {
@@ -103,12 +98,10 @@ namespace EventTest
                 VatReclaimMonths = 1
             };
 
-            var notifier = new SchemeRecordViewNotifier(record);
-
+            var notifier = record.GetNotifier();
+            notifier.Name += "!";
             //var x = new ViewModelBaseViewNotifier();
-            _ = notifier.Id;
-            var x = notifier.Name;
-            var test = record;
+            var createEvent = record.GetCreateObjectEvent("me!");
         }
     }
 }

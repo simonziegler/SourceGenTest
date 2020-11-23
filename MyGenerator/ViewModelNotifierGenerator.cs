@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Text;
 
 namespace MyGenerator
@@ -15,10 +14,17 @@ namespace MyGenerator
     public class ViewModelNotifierGenerator : ISourceGenerator
     {
         /// <summary>
-        /// Tjhe name of the attribute used by this generator
+        /// The name of the attribute used by this generator to identify view model properties to be
+        /// replicated from VM records to companion notifier classes and to be tied to database
+        /// events.
         /// </summary>
-        public const string AttributeName = "ViewModel";
-        private static int crap = 0;
+        public const string ViewModelAttributeName = "ViewModel";
+
+        /// <summary>
+        /// The name of the attribute used by this generator
+        /// </summary>
+        public const string TypeDiscriminatorAttributeName = "ZTypeDiscriminator";
+
         private static readonly string attributeText = $@"
 using System;
 namespace Vectis.Generator
@@ -27,14 +33,35 @@ namespace Vectis.Generator
     /// Causes the vectis source generator to mark this as a property to include in a notifier to emit update events.
     /// </summary>
     [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
-    public sealed class {AttributeName}Attribute : Attribute
+    public sealed class {ViewModelAttributeName}Attribute : Attribute
     {{
-        public string PropertyName {{ get; set; }}
+        /// <summary>
+        /// Set to true this property will be readonly in its companion notifier.
+        /// Used for ids and other immutable data.
+        /// </summary>
+        public bool ReadOnly {{ get; set; }} = false;
         
-        public {AttributeName}Attribute() {{ }}
+        public {ViewModelAttributeName}Attribute() {{ }}
     }}
-}}
-";
+}}";
+//    /// <summary>
+//    /// Used to discriminate derived types of the marked class. Not intended to be used for abstract classes.
+//    /// </summary>
+//    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
+//    public sealed class {TypeDiscriminatorAttributeName}Attribute : Attribute
+//    {{
+//        /// <summary>
+//        /// Gets the name of the property used to discriminate derived types of the class marked by this attribute.
+//        /// </summary>
+//        public string DiscriminatorString {{ get; set; }}
+        
+//        public {TypeDiscriminatorAttributeName}Attribute(string discriminatorString)
+//        {{
+//            DiscriminatorString = discriminatorString;
+//        }}
+//    }}
+//}}
+//";
 
         public void Initialize(GeneratorInitializationContext context)
         {
@@ -52,7 +79,7 @@ namespace Vectis.Generator
         public void Execute(GeneratorExecutionContext context)
         {
             // add the attribute text
-            context.AddSource($"{AttributeName}Attribute", attributeText);
+            context.AddSource($"{ViewModelAttributeName}Attribute", attributeText);
 
             // retreive the populated receiver 
             if (!(context.SyntaxReceiver is SyntaxReceiver receiver))
@@ -64,89 +91,205 @@ namespace Vectis.Generator
             Compilation compilation = context.Compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(SourceText.From(attributeText, Encoding.UTF8), options));
 
             // get the newly bound attribute, and INotifyPropertyChanged
-            INamedTypeSymbol attributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{AttributeName}Attribute");
+            INamedTypeSymbol viewModelAttributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{ViewModelAttributeName}Attribute");
+            INamedTypeSymbol typeDiscriminatorAttributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{TypeDiscriminatorAttributeName}Attribute");
             INamedTypeSymbol notifySymbol = compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
-
-            List<IPropertySymbol> propertySymbols = new List<IPropertySymbol>();
-            foreach (PropertyDeclarationSyntax property in receiver.CandidateProperties)
+            
+            List<(IPropertySymbol propertySymbol, RecordDeclarationSyntax recordDeclarationSyntax)> propertySymbols = new List<(IPropertySymbol, RecordDeclarationSyntax)>();
+            foreach (var group in receiver.CandidateProperties.GroupBy(cp => cp.Parent))
             {
-                SemanticModel model = compilation.GetSemanticModel(property.SyntaxTree);
-                IPropertySymbol propertySymbol = model.GetDeclaredSymbol(property) as IPropertySymbol;
-                propertySymbols.Add(propertySymbol);
-            }
-
-            // group the fields by class, and generate the source
-            foreach (var group in propertySymbols.GroupBy(f => f.ContainingType))
-            {
-                // Respectively the type symbol cannot be abstract, public, a record (established by the presence of an EqualityContract and partial
-                //if (!group.Key.IsAbstract
-                //    && group.Key.DeclaredAccessibility == Accessibility.Public
-                //    && group.Key.GetMembers().Any(x => x.Kind == SymbolKind.Property && x.Name == "EqualityContract" && x.IsImplicitlyDeclared)
-                //    && true)
+                var recordDeclarationSyntax = group.Key as RecordDeclarationSyntax;
+                
+                if (recordDeclarationSyntax == null)
                 {
-                    string classSource = ProcessClass(group.Key, group.ToList(), attributeSymbol, notifySymbol, context);
-                    context.AddSource($"{GetNotifierClassName(group.Key.Name)}.cs", classSource);
+                    context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
+                            "VSG0001",
+                            $"{ViewModelAttributeName} can only be used in records",
+                            $"{ViewModelAttributeName} is reserved for use in public partial records and cannot be used in '{group.Key}', which is not a record",
+                            "Vectis Source Generation",
+                            DiagnosticSeverity.Error,
+                            true
+                        ), Location.None));
+
+                    continue;
                 }
+
+                var modifiers = recordDeclarationSyntax.Modifiers.Select(m => m.Text).ToList();
+                SemanticModel recordModel = compilation.GetSemanticModel(recordDeclarationSyntax.SyntaxTree);
+                INamedTypeSymbol recordSymbol = recordModel.GetDeclaredSymbol(recordDeclarationSyntax);
+
+                if (!modifiers.Contains("public") || !modifiers.Contains("partial"))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
+                            "VSG0002",
+                            $"{ViewModelAttributeName} can only be used in public records",
+                            $"{ViewModelAttributeName} is reserved for use in public partial records and cannot be used in '{recordSymbol.Name}', which is not declared as 'public partial'",
+                            "Vectis Source Generation",
+                            DiagnosticSeverity.Error,
+                            true
+                        ), Location.None));
+
+                    continue;
+                }
+
+                if (!modifiers.Contains("abstract") && !recordSymbol.GetAttributes().Any(ad => ad.AttributeClass.Name == typeDiscriminatorAttributeSymbol.Name))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
+                            "VSG0003",
+                            $"{ViewModelAttributeName} can only be used in public records that are decorated with the {TypeDiscriminatorAttributeName} attribute",
+                            $"{ViewModelAttributeName} is reserved for use in public partial records that are decorated with the {TypeDiscriminatorAttributeName} attribute and cannot be used in '{recordSymbol.Name}', which lacks [{TypeDiscriminatorAttributeName}(\"... Some Type Discrimination Text ...\")]",
+                            "Vectis Source Generation",
+                            DiagnosticSeverity.Error,
+                            true
+                        ), Location.None));
+
+                    continue;
+                }
+
+                //AttributeData attributeData = recordSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(typeDiscriminatorAttributeSymbol, SymbolEqualityComparer.Default));
+                //TypedConstant discriminatorString = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "DiscriminatorString").Value;
+
+                string classSource = ProcessClass(recordSymbol, recordDeclarationSyntax, group.ToList(), viewModelAttributeSymbol, notifySymbol, "DiscriminatorString", context, compilation);
+                context.AddSource($"{GetNotifierClassName(recordSymbol.Name)}.cs", classSource);
             }
         }
 
-        private string ProcessClass(INamedTypeSymbol classSymbol, List<IPropertySymbol> properties, ISymbol attributeSymbol, ISymbol notifySymbol, GeneratorExecutionContext context)
+        private string ProcessClass(INamedTypeSymbol recordSymbol, RecordDeclarationSyntax recordDeclarationSyntax, List<PropertyDeclarationSyntax> properties, ISymbol attributeSymbol, ISymbol notifySymbol, string discriminatorString, GeneratorExecutionContext context, Compilation compilation)
         {
-            //return null;
-            if (!classSymbol.ContainingSymbol.Equals(classSymbol.ContainingNamespace, SymbolEqualityComparer.Default))
+            var leadingComment = recordDeclarationSyntax.GetLeadingTrivia().ToString().Trim();
+            var propertySymbols = new List<IPropertySymbol>();
+            
+            foreach (var property in properties)
             {
-                return null; //TODO: issue a diagnostic that it must be top level
+                SemanticModel model = compilation.GetSemanticModel(property.SyntaxTree);
+                propertySymbols.Add(model.GetDeclaredSymbol(property));
             }
 
-            string namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
+            string namespaceName = recordSymbol.ContainingNamespace.ToDisplayString();
             
             string abstractTag = "";
 
-            if (classSymbol.IsAbstract)
+            if (recordSymbol.IsAbstract)
             {
                 abstractTag = "abstract ";
             }
 
             string baseInheritance = "";
             string baseConstructorCall = "";
+            bool isDerived = false;
+            string virtualOverride = "virtual";
 
-            if (classSymbol.BaseType != null && classSymbol.BaseType.ContainingNamespace.Name == classSymbol.ContainingNamespace.Name)
+            if (recordSymbol.BaseType != null && recordSymbol.BaseType.ContainingNamespace.Name == recordSymbol.ContainingNamespace.Name)
             {
-                baseInheritance = $"{GetNotifierClassName(classSymbol.BaseType.Name)}, ";
+                isDerived = true;
+                virtualOverride = "override";
+                baseInheritance = $"{GetNotifierClassName(recordSymbol.BaseType.Name)}, ";
                 baseConstructorCall = " : base(record)";
             }
 
             // begin building the generated source
             StringBuilder source = new StringBuilder();
+            source.AppendLineIndented(0, "using System;");
+            source.AppendLineIndented(0, "using System.Collections.Generic;");
+            source.AppendLineIndented(0, "using Vectis.Events;");
+            source.AppendLineIndented(0, "");
             source.AppendLineIndented(0, $"namespace {namespaceName}");
             source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, $"public partial record {classSymbol.Name}");
+            source.AppendLineIndented(1, leadingComment);
+            source.AppendLineIndented(1, $"public partial record {recordSymbol.Name}");
             source.AppendLineIndented(1, "{");
-            source.AppendLineIndented(2, $"public string Crap{crap++} {{ get; init; }}");
+
+            source.AppendLineIndented(2, $"/// <summary>");
+            source.AppendLineIndented(2, $"/// Returns a list of <see cref=\"CreateObjectEvent.PropertyValuePair\"/> for each property of the record.");
+            source.AppendLineIndented(2, $"/// </summary>");
+            source.AppendLineIndented(2, $"/// <returns></returns>");
+            source.AppendLineIndented(2, $"internal {virtualOverride} List<CreateObjectEvent.PropertyValuePair> GetPropertyValuePairs()");
+            source.AppendLineIndented(2, "{");
+            source.AppendLineIndented(3, "List<CreateObjectEvent.PropertyValuePair> properties = new();");
+
+            if (isDerived)
+            {
+                source.AppendLineIndented(3, "properties.AddRange(base.GetPropertyValuePairs());");
+            }
+
+            foreach (var propertySymbol in propertySymbols)
+            {
+                source.AppendLineIndented(3, $"properties.Add(new() {{ PropertyName = \"{propertySymbol.Name}\", Value = $\"{{{propertySymbol.Name}}}\" }});");
+            }
+
+            source.AppendLineIndented(3, "return properties;");
+            source.AppendLineIndented(2, "}");
+
+            if (!recordSymbol.IsAbstract)
+            {
+                source.AppendLineIndented(2, $"");
+                source.AppendLineIndented(2, $"/// <summary>");
+                source.AppendLineIndented(2, $"/// Returns a <see cref=\"{GetNotifierClassName(recordSymbol.Name)}\"/> intialized with the same parameters held in this <see cref=\"{recordSymbol.Name}\"/>.");
+                source.AppendLineIndented(2, $"/// </summary>");
+                source.AppendLineIndented(2, $"/// <returns></returns>");
+                source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)} GetNotifier()");
+                source.AppendLineIndented(2, "{");
+                source.AppendLineIndented(3, $"return new {GetNotifierClassName(recordSymbol.Name)}(this);");
+                source.AppendLineIndented(2, "}");
+                source.AppendLineIndented(2, "");
+
+                source.AppendLineIndented(2, $"/// <summary>");
+                source.AppendLineIndented(2, $"/// Returns a <see cref=\"CreateObjectEvent\"/> populated with the details in this record.");
+                source.AppendLineIndented(2, $"/// </summary>");
+                source.AppendLineIndented(2, $"/// <returns></returns>");
+                source.AppendLineIndented(2, $"public CreateObjectEvent GetCreateObjectEvent(string userId)");
+                source.AppendLineIndented(2, "{");
+                source.AppendLineIndented(3, "return new()");
+                source.AppendLineIndented(3, "{");
+                source.AppendLineIndented(4, "Id = $\"{Event.NewId()}\",");
+                source.AppendLineIndented(4, "UserId = $\"{userId}\",");
+                source.AppendLineIndented(4, "Timestamp = DateTime.Now,");
+                source.AppendLineIndented(4, $"TypeDiscriminator = \"{discriminatorString}\",");
+                source.AppendLineIndented(4, "ObjectId = $\"{Id}\",");
+                source.AppendLineIndented(4, "Properties = GetPropertyValuePairs().ToArray()");
+                source.AppendLineIndented(3, "};");
+                source.AppendLineIndented(2, "}");
+            }
+
             source.AppendLineIndented(1, "}");
+
             source.AppendLineIndented(1, "");
-            source.AppendLineIndented(1, "");
-            source.AppendLineIndented(1, $"public {abstractTag}class {GetNotifierClassName(classSymbol.Name)} : {baseInheritance}{notifySymbol.ToDisplayString()}");
+            source.AppendLineIndented(1, $"/// <inheritdoc cref=\"{recordSymbol.Name}\"/>");
+            source.AppendLineIndented(1, $"/// <remarks>Companion edittable view model class to <see cref=\"{recordSymbol.Name}\"/>.</remarks>");
+            source.AppendLineIndented(1, $"public {abstractTag}class {GetNotifierClassName(recordSymbol.Name)} : {baseInheritance}{notifySymbol.ToDisplayString()}");
             source.AppendLineIndented(1, "{");
             source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
+
+            if (!recordSymbol.IsAbstract)
+            {
+                source.AppendLineIndented(2, "");
+                source.AppendLineIndented(2, "/// <summary>");
+                source.AppendLineIndented(2, $"/// The backing <see cref=\"{recordSymbol.Name}\"/> from which this object was created.");
+                source.AppendLineIndented(2, "/// </summary>");
+                source.AppendLineIndented(2, $"public readonly {recordSymbol.Name} Record;");
+            }
+
+            // create properties for each field 
+            foreach (var propertySymbol in propertySymbols)
+            {
+                ProcessProperty(source, recordSymbol.Name, propertySymbol, attributeSymbol);
+            }
+
             source.AppendLineIndented(2, "");
-            source.AppendLineIndented(2, $"public {GetNotifierClassName(classSymbol.Name)}({classSymbol.Name} record){baseConstructorCall}");
+            source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)}({recordSymbol.Name} record){baseConstructorCall}");
             source.AppendLineIndented(2, "{");
 
-            foreach (var propertySymbol in properties)
+            if (!recordSymbol.IsAbstract)
             {
-                source.AppendLineIndented(3, $"this.{propertySymbol.Name} = record.{propertySymbol.Name};");
+                source.AppendLineIndented(3, $"Record = record;");
+            }
+
+            foreach (var propertySymbol in propertySymbols)
+            {
+                source.AppendLineIndented(3, $"{propertySymbol.Name} = record.{propertySymbol.Name};");
             }
 
             source.AppendLineIndented(2, "}");
-            source.AppendLineIndented(2, "");
-
-            // create properties for each field 
-            foreach (var propertySymbol in properties)
-            {
-                ProcessProperty(source, classSymbol.Name, propertySymbol, attributeSymbol);
-            }
-
             source.AppendLineIndented(1, "}");
             source.AppendLineIndented(0, "}");
             
@@ -161,20 +304,28 @@ namespace Vectis.Generator
 
             // get the ViewModel attribute from the field, and any associated data
             AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
-            TypedConstant overridenNameOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "PropertyName").Value;
+            TypedConstant readOnlyOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "ReadOnly").Value;
 
             source.AppendLineIndented(2, "");
-            source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
-            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
-            source.AppendLineIndented(2, $"public {fieldType} {propertySymbol.Name}");
-            source.AppendLineIndented(2, "{");
-            source.AppendLineIndented(3, $"get => this.{fieldName};");
-            source.AppendLineIndented(3, "set");
-            source.AppendLineIndented(3, "{");
-            source.AppendLineIndented(4, $"this.{fieldName} = value;");
-            source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
-            source.AppendLineIndented(3, "}");
-            source.AppendLineIndented(2, "}");
+            if (readOnlyOpt.IsNull || !Convert.ToBoolean(readOnlyOpt.Value))
+            {
+                source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
+                source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
+                source.AppendLineIndented(2, $"public {fieldType} {propertySymbol.Name}");
+                source.AppendLineIndented(2, "{");
+                source.AppendLineIndented(3, $"get => {fieldName};");
+                source.AppendLineIndented(3, "set");
+                source.AppendLineIndented(3, "{");
+                source.AppendLineIndented(4, $"{fieldName} = value;");
+                source.AppendLineIndented(4, $"PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
+                source.AppendLineIndented(3, "}");
+                source.AppendLineIndented(2, "}");
+            }
+            else
+            {
+                source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
+                source.AppendLineIndented(2, $"public readonly {fieldType} {propertySymbol.Name};");
+            }
         }
 
         /// <summary>
@@ -191,7 +342,7 @@ namespace Vectis.Generator
             {
                 // any field with at least one attribute is a candidate for property generation
                 if (syntaxNode is PropertyDeclarationSyntax propertyDeclarationSyntax
-                    && propertyDeclarationSyntax.AttributeLists.Where(al => al.ToString() == $"[{AttributeName}]").Any())
+                    && propertyDeclarationSyntax.AttributeLists.Where(al => al.ToString().Substring(1, ViewModelAttributeName.Length) == ViewModelAttributeName).Any())
                 {
                     CandidateProperties.Add(propertyDeclarationSyntax);
                 }

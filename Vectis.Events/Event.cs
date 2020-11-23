@@ -58,5 +58,12 @@ namespace Vectis.Events
         /// <param name="timestamp"></param>
         //public Event(string partitionKey, string id, string userId, DateTime timestamp) => (PartitionKey, Id, UserId, Timestamp) = (partitionKey, id, userId, timestamp);
         public Event() { }
+
+
+        /// <summary>
+        /// Returns a new id in the format "[timestamp ticks]|[guid]"
+        /// </summary>
+        /// <returns></returns>
+        public static string NewId() => $"{DateTime.UtcNow.Ticks}|{Guid.NewGuid()}";
     }
 }
