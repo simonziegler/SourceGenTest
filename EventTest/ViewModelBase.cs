@@ -9,7 +9,7 @@ namespace EventTest
         /// </summary>
         //[Display(Name = "Development Name", Prompt = "Enter a name for the development")]
         [MessagePack.Key(0)]
-        [ViewModel(ReadOnly = true)]
+        [ViewModel]
         public string Id { get; init; }
     }
 }

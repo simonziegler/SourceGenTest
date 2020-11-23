@@ -139,10 +139,14 @@ namespace Vectis.Generator
                     continue;
                 }
 
-                var attributeData = recordSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(typeDiscriminatorAttributeSymbol, SymbolEqualityComparer.Default));
-                var discriminator = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "Discriminator").Value.Value.ToString();
+                var discriminator = "";
 
-                if (!modifiers.Contains("abstract") && !recordSymbol.GetAttributes().Any(ad => ad.AttributeClass.Name == typeDiscriminatorAttributeSymbol.Name))
+                if (recordSymbol.GetAttributes().Any(ad => ad.AttributeClass.Name == typeDiscriminatorAttributeSymbol.Name))
+                {
+                    var attributeData = recordSymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(typeDiscriminatorAttributeSymbol, SymbolEqualityComparer.Default));
+                    discriminator = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "Discriminator").Value.Value.ToString();
+                }
+                else if (!modifiers.Contains("abstract"))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(new DiagnosticDescriptor(
                             "VSG0004",
