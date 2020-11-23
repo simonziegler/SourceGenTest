@@ -1,6 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System;
@@ -24,7 +23,7 @@ namespace MyGenerator
         /// <summary>
         /// The name of the attribute used by this generator
         /// </summary>
-        public const string TypeDiscriminatorAttributeName = "ZTypeDiscriminator";
+        public const string TypeDiscriminatorAttributeName = "TypeDiscriminator";
 
         private static readonly string attributeText = $@"
 using System;
@@ -59,7 +58,7 @@ namespace Vectis.Generator
 
         public void Initialize(GeneratorInitializationContext context)
         {
-#if DEBUG
+#if DEBUGx
             if (!Debugger.IsAttached)
             {
                 Debugger.Launch();
