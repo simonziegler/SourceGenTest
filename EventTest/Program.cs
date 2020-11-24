@@ -20,9 +20,9 @@ namespace EventTest
 
             var update1 = new UpdatePropertyEvent()
             {
-                PartitionKey = "pk",
                 Id = "id",
                 UserId = "me",
+                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 Timestamp = DateTime.Now,
                 ObjectId = "object id",
                 PropertyName = "Name",
@@ -41,8 +41,8 @@ namespace EventTest
 
             var simple = new SimpleEvent()
             {
-                PartitionKey = "pk",
                 Id = "id",
+                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 UserId = "me",
                 Timestamp = DateTime.Now
             };
@@ -69,8 +69,8 @@ namespace EventTest
 
             CreateObjectEvent create1 = new()
             {
-                PartitionKey = "pk",
                 Id = "id",
+                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 UserId = "me",
                 Timestamp = DateTime.Now,
                 TypeDiscriminator = "My Type",

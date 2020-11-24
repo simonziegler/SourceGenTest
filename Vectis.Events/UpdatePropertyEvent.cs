@@ -15,23 +15,30 @@
 
 
         /// <summary>
-        /// Name of the property being updated.
+        /// The id of the previous event. For future use in concurrency/validity checking.
         /// </summary>
         [MessagePack.Key(5)]
+        public string PreviousEventId { get; init; }
+
+
+        /// <summary>
+        /// Name of the property being updated.
+        /// </summary>
+        [MessagePack.Key(6)]
         public string PropertyName { get; init; }
 
 
         /// <summary>
         /// Value of the property before being updated.
         /// </summary>
-        [MessagePack.Key(6)]
+        [MessagePack.Key(7)]
         public string PreviousValue { get; init; }
 
 
         /// <summary>
         /// Value of the property after being updated.
         /// </summary>
-        [MessagePack.Key(7)]
+        [MessagePack.Key(8)]
         public string NextValue { get; init; }
 
 

@@ -14,6 +14,12 @@ namespace MyGenerator
     public class ViewModelNotifierGenerator : ISourceGenerator
     {
         /// <summary>
+        /// The name of the attribute used by this generator to identify view model's base record.
+        /// events.
+        /// </summary>
+        public const string ViewModelBaseRecordAttributeName = "ViewModelBaseRecord";
+
+        /// <summary>
         /// The name of the attribute used by this generator to identify view model properties to be
         /// replicated from VM records to companion notifier classes and to be tied to database
         /// events.
@@ -29,6 +35,12 @@ namespace MyGenerator
 using System;
 namespace Vectis.Generator
 {{
+    /// <summary>
+    /// Attribute to be used on the root class of the view model.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
+    public sealed class {ViewModelBaseRecordAttributeName}Attribute : Attribute {{ }}
+    
     /// <summary>
     /// Causes the vectis source generator to mark this as a property to include in a notifier to emit update events.
     /// </summary>
@@ -86,7 +98,6 @@ namespace Vectis.Generator
             // get the newly bound attribute, and INotifyPropertyChanged
             INamedTypeSymbol viewModelAttributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{ViewModelAttributeName}Attribute");
             INamedTypeSymbol typeDiscriminatorAttributeSymbol = compilation.GetTypeByMetadataName($"Vectis.Generator.{TypeDiscriminatorAttributeName}Attribute");
-            INamedTypeSymbol notifySymbol = compilation.GetTypeByMetadataName("System.ComponentModel.INotifyPropertyChanged");
             
             List<(IPropertySymbol propertySymbol, RecordDeclarationSyntax recordDeclarationSyntax)> propertySymbols = new List<(IPropertySymbol, RecordDeclarationSyntax)>();
             foreach (var group in receiver.CandidateProperties.GroupBy(cp => cp.Parent))
@@ -160,42 +171,35 @@ namespace Vectis.Generator
                     continue;
                 }
 
-                string classSource = ProcessClass(recordSymbol, recordDeclarationSyntax, group.ToList(), viewModelAttributeSymbol, notifySymbol, discriminator, context, compilation);
-                context.AddSource($"{GetNotifierClassName(recordSymbol.Name)}.cs", classSource);
+                var generatedSource = ProcessRecordAndClass(recordSymbol, recordDeclarationSyntax, group.ToList(), viewModelAttributeSymbol, discriminator, context, compilation);
+                
+                context.AddSource($"{GetNotifierClassName(recordSymbol.Name)}.cs", generatedSource.ToString());
             }
         }
 
-        private string ProcessClass(INamedTypeSymbol recordSymbol, RecordDeclarationSyntax recordDeclarationSyntax, List<PropertyDeclarationSyntax> properties, ISymbol attributeSymbol, ISymbol notifySymbol, string discriminatorString, GeneratorExecutionContext context, Compilation compilation)
+        /// <summary>
+        /// Returns a StringBuilder with the contents of a generated source file for extension to a partial record plus its companion notifier class.
+        /// </summary>
+        /// <param name="recordSymbol"></param>
+        /// <param name="recordDeclarationSyntax"></param>
+        /// <param name="properties"></param>
+        /// <param name="attributeSymbol"></param>
+        /// <param name="notifySymbol"></param>
+        /// <param name="discriminatorString"></param>
+        /// <param name="context"></param>
+        /// <param name="compilation"></param>
+        /// <returns></returns>
+        private StringBuilder ProcessRecordAndClass(INamedTypeSymbol recordSymbol, RecordDeclarationSyntax recordDeclarationSyntax, List<PropertyDeclarationSyntax> properties, ISymbol attributeSymbol, string discriminatorString, GeneratorExecutionContext context, Compilation compilation)
         {
-            var leadingComment = recordDeclarationSyntax.GetLeadingTrivia().ToString().Trim();
-            var propertySymbols = new List<IPropertySymbol>();
-            
+            string namespaceName = recordSymbol.ContainingNamespace.ToDisplayString();
+            bool isDerived = recordSymbol.BaseType != null && recordSymbol.BaseType.ContainingNamespace.Name == recordSymbol.ContainingNamespace.Name;
+            string leadingComment = recordDeclarationSyntax.GetLeadingTrivia().ToString().Trim();
+            List<IPropertySymbol> propertySymbols = new List<IPropertySymbol>();
+
             foreach (var property in properties)
             {
                 SemanticModel model = compilation.GetSemanticModel(property.SyntaxTree);
                 propertySymbols.Add(model.GetDeclaredSymbol(property));
-            }
-
-            string namespaceName = recordSymbol.ContainingNamespace.ToDisplayString();
-            
-            string abstractTag = "";
-
-            if (recordSymbol.IsAbstract)
-            {
-                abstractTag = "abstract ";
-            }
-
-            string baseInheritance = "";
-            string baseConstructorCall = "";
-            bool isDerived = false;
-            string virtualOverride = "virtual";
-
-            if (recordSymbol.BaseType != null && recordSymbol.BaseType.ContainingNamespace.Name == recordSymbol.ContainingNamespace.Name)
-            {
-                isDerived = true;
-                virtualOverride = "override";
-                baseInheritance = $"{GetNotifierClassName(recordSymbol.BaseType.Name)}, ";
-                baseConstructorCall = " : base(record)";
             }
 
             // begin building the generated source
@@ -206,138 +210,223 @@ namespace Vectis.Generator
             source.AppendLineIndented(0, "");
             source.AppendLineIndented(0, $"namespace {namespaceName}");
             source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, leadingComment);
-            source.AppendLineIndented(1, $"public partial record {recordSymbol.Name}");
-            source.AppendLineIndented(1, "{");
 
-            source.AppendLineIndented(2, $"/// <summary>");
-            source.AppendLineIndented(2, $"/// Returns a list of <see cref=\"CreateObjectEvent.PropertyValuePair\"/> for each property of the record.");
-            source.AppendLineIndented(2, $"/// </summary>");
-            source.AppendLineIndented(2, $"/// <returns></returns>");
-            source.AppendLineIndented(2, $"internal {virtualOverride} List<CreateObjectEvent.PropertyValuePair> GetPropertyValuePairs()");
-            source.AppendLineIndented(2, "{");
-            source.AppendLineIndented(3, "List<CreateObjectEvent.PropertyValuePair> properties = new();");
-
-            if (isDerived)
-            {
-                source.AppendLineIndented(3, "properties.AddRange(base.GetPropertyValuePairs());");
-            }
-
-            foreach (var propertySymbol in propertySymbols)
-            {
-                source.AppendLineIndented(3, $"properties.Add(new() {{ PropertyName = \"{propertySymbol.Name}\", Value = $\"{{{propertySymbol.Name}}}\" }});");
-            }
-
-            source.AppendLineIndented(3, "return properties;");
-            source.AppendLineIndented(2, "}");
-
-            if (!recordSymbol.IsAbstract)
-            {
-                source.AppendLineIndented(2, $"");
-                source.AppendLineIndented(2, $"/// <summary>");
-                source.AppendLineIndented(2, $"/// Returns a <see cref=\"{GetNotifierClassName(recordSymbol.Name)}\"/> intialized with the same parameters held in this <see cref=\"{recordSymbol.Name}\"/>.");
-                source.AppendLineIndented(2, $"/// </summary>");
-                source.AppendLineIndented(2, $"/// <returns></returns>");
-                source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)} GetNotifier()");
-                source.AppendLineIndented(2, "{");
-                source.AppendLineIndented(3, $"return new {GetNotifierClassName(recordSymbol.Name)}(this);");
-                source.AppendLineIndented(2, "}");
-                source.AppendLineIndented(2, "");
-
-                source.AppendLineIndented(2, $"/// <summary>");
-                source.AppendLineIndented(2, $"/// Returns a <see cref=\"CreateObjectEvent\"/> populated with the details in this record.");
-                source.AppendLineIndented(2, $"/// </summary>");
-                source.AppendLineIndented(2, $"/// <returns></returns>");
-                source.AppendLineIndented(2, $"public CreateObjectEvent GetCreateObjectEvent(string userId)");
-                source.AppendLineIndented(2, "{");
-                source.AppendLineIndented(3, "return new()");
-                source.AppendLineIndented(3, "{");
-                source.AppendLineIndented(4, "Id = $\"{ViewModelEvent.NewId()}\",");
-                source.AppendLineIndented(4, "UserId = $\"{userId}\",");
-                source.AppendLineIndented(4, "Timestamp = DateTime.Now,");
-                source.AppendLineIndented(4, $"TypeDiscriminator = \"{discriminatorString}\",");
-                source.AppendLineIndented(4, "ObjectId = $\"{Id}\",");
-                source.AppendLineIndented(4, "Properties = GetPropertyValuePairs().ToArray()");
-                source.AppendLineIndented(3, "};");
-                source.AppendLineIndented(2, "}");
-            }
-
-            source.AppendLineIndented(1, "}");
+            ProcessPartialRecordAddons();
 
             source.AppendLineIndented(1, "");
-            source.AppendLineIndented(1, $"/// <inheritdoc cref=\"{recordSymbol.Name}\"/>");
-            source.AppendLineIndented(1, $"/// <remarks>Companion edittable view model class to <see cref=\"{recordSymbol.Name}\"/>.</remarks>");
-            source.AppendLineIndented(1, $"public {abstractTag}class {GetNotifierClassName(recordSymbol.Name)} : {baseInheritance}{notifySymbol.ToDisplayString()}");
-            source.AppendLineIndented(1, "{");
-            source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
 
-            if (!recordSymbol.IsAbstract)
-            {
-                source.AppendLineIndented(2, "");
-                source.AppendLineIndented(2, "/// <summary>");
-                source.AppendLineIndented(2, $"/// The backing <see cref=\"{recordSymbol.Name}\"/> from which this object was created.");
-                source.AppendLineIndented(2, "/// </summary>");
-                source.AppendLineIndented(2, $"public readonly {recordSymbol.Name} Record;");
-            }
+            ProcessCompanionClass();
 
-            // create properties for each field 
-            foreach (var propertySymbol in propertySymbols)
-            {
-                ProcessProperty(source, recordSymbol.Name, propertySymbol, attributeSymbol);
-            }
-
-            source.AppendLineIndented(2, "");
-            source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)}({recordSymbol.Name} record){baseConstructorCall}");
-            source.AppendLineIndented(2, "{");
-
-            if (!recordSymbol.IsAbstract)
-            {
-                source.AppendLineIndented(3, $"Record = record;");
-            }
-
-            foreach (var propertySymbol in propertySymbols)
-            {
-                source.AppendLineIndented(3, $"{propertySymbol.Name} = record.{propertySymbol.Name};");
-            }
-
-            source.AppendLineIndented(2, "}");
             source.AppendLineIndented(1, "}");
             source.AppendLineIndented(0, "}");
-            
-            return source.ToString();
+
+            return source;
+
+            // Adds functionality to the record.
+            void ProcessPartialRecordAddons()
+            {
+                if (!string.IsNullOrEmpty(leadingComment))
+                {
+                    source.AppendLineIndented(1, leadingComment);
+                }
+
+                source.AppendLineIndented(1, $"public partial record {recordSymbol.Name}");
+                source.AppendLineIndented(1, "{");
+
+                // Build GetPropertyValuePairs()
+                {
+                    source.AppendLineIndented(2, $"/// <summary>");
+                    source.AppendLineIndented(2, $"/// Returns a list of <see cref=\"CreateObjectEvent.PropertyValuePair\"/> for each property of the record.");
+                    source.AppendLineIndented(2, $"/// </summary>");
+                    source.AppendLineIndented(2, $"/// <returns></returns>");
+                    source.AppendLineIndented(2, $"internal {(isDerived ? "override" : "virtual")} List<CreateObjectEvent.PropertyValuePair> GetPropertyValuePairs()");
+                    source.AppendLineIndented(2, "{");
+                    source.AppendLineIndented(3, "List<CreateObjectEvent.PropertyValuePair> properties = new();");
+
+                    if (isDerived)
+                    {
+                        source.AppendLineIndented(3, "properties.AddRange(base.GetPropertyValuePairs());");
+                    }
+
+                    foreach (var propertySymbol in propertySymbols)
+                    {
+                        source.AppendLineIndented(3, $"properties.Add(new() {{ PropertyName = \"{propertySymbol.Name}\", Value = $\"{{{propertySymbol.Name}}}\" }});");
+                    }
+
+                    source.AppendLineIndented(3, "return properties;");
+                    source.AppendLineIndented(2, "}");
+                }
+
+                // Build GetNotifier() only if the record is not abstract
+                if (!recordSymbol.IsAbstract)
+                {
+                    source.AppendLineIndented(2, $"");
+                    source.AppendLineIndented(2, $"/// <summary>");
+                    source.AppendLineIndented(2, $"/// Returns a <see cref=\"{GetNotifierClassName(recordSymbol.Name)}\"/> intialized with the same parameters held in this <see cref=\"{recordSymbol.Name}\"/>.");
+                    source.AppendLineIndented(2, $"/// </summary>");
+                    source.AppendLineIndented(2, $"/// <returns></returns>");
+                    source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)} GetNotifier()");
+                    source.AppendLineIndented(2, "{");
+                    source.AppendLineIndented(3, $"return new {GetNotifierClassName(recordSymbol.Name)}(this);");
+                    source.AppendLineIndented(2, "}");
+                    source.AppendLineIndented(2, "");
+
+                    source.AppendLineIndented(2, $"/// <summary>");
+                    source.AppendLineIndented(2, $"/// Returns a <see cref=\"CreateObjectEvent\"/> populated with the details in this record.");
+                    source.AppendLineIndented(2, $"/// </summary>");
+                    source.AppendLineIndented(2, $"/// <returns></returns>");
+                    source.AppendLineIndented(2, $"public CreateObjectEvent GetCreateObjectEvent(string userId)");
+                    source.AppendLineIndented(2, "{");
+                    source.AppendLineIndented(3, "return new()");
+                    source.AppendLineIndented(3, "{");
+                    source.AppendLineIndented(4, "Id = $\"{ViewModelEvent.NewId()}\",");
+                    source.AppendLineIndented(4, "UserId = $\"{userId}\",");
+                    source.AppendLineIndented(4, "Timestamp = DateTime.Now,");
+                    source.AppendLineIndented(4, $"TypeDiscriminator = \"{discriminatorString}\",");
+                    source.AppendLineIndented(4, "ObjectId = $\"{Id}\",");
+                    source.AppendLineIndented(4, "Properties = GetPropertyValuePairs().ToArray()");
+                    source.AppendLineIndented(3, "};");
+                    source.AppendLineIndented(2, "}");
+                }
+
+                source.AppendLineIndented(1, "}");
+            }
+
+            // Adds the companion class
+            void ProcessCompanionClass()
+            {
+                source.AppendLineIndented(1, $"/// <inheritdoc cref=\"{recordSymbol.Name}\"/>");
+                source.AppendLineIndented(1, $"/// <remarks>Companion edittable view model class to <see cref=\"{recordSymbol.Name}\"/>.</remarks>");
+                source.AppendLineIndented(1, $"public {(recordSymbol.IsAbstract ? "abstract " : "")}class {GetNotifierClassName(recordSymbol.Name)}{(isDerived ? " : " + GetNotifierClassName(recordSymbol.BaseType.Name) : "")}");
+                source.AppendLineIndented(1, "{");
+
+                // Add the UpdatedEventHander delegate only if this is not a derived record (indicating that it's the base record)
+                if (!isDerived)
+                {
+                    source.AppendLineIndented(2, "/// <summary>");
+                    source.AppendLineIndented(2, "/// The method that will handle an event raised by the view model in response to a property being updated.");
+                    source.AppendLineIndented(2, "/// </summary>");
+                    source.AppendLineIndented(2, "/// <param name=\"sender\"></param>");
+                    source.AppendLineIndented(2, "/// <param name=\"e\"></param>");
+                    source.AppendLineIndented(2, "public delegate void UpdatedEventHandler(object sender, ViewModelEvent e);");
+
+                }
+
+                // Add a copy of the originator record only if this is a non-abstract class
+                {
+                    if (!recordSymbol.IsAbstract)
+                    {
+                        source.AppendLineIndented(2, "");
+                        source.AppendLineIndented(2, "/// <summary>");
+                        source.AppendLineIndented(2, $"/// The backing <see cref=\"{recordSymbol.Name}\"/> from which this object was created.");
+                        source.AppendLineIndented(2, "/// </summary>");
+                        source.AppendLineIndented(2, $"public readonly {recordSymbol.Name} OriginatorRecord;");
+                    }
+
+                    // Create companion properties for each of the base record's fields
+                    foreach (var propertySymbol in propertySymbols)
+                    {
+                        ProcessCompanionClassProperty(recordSymbol.Name, propertySymbol);
+                    }
+                }
+
+                // Build the constructor which calls the base constructor if this is a derived record
+                {
+                    source.AppendLineIndented(2, "");
+                    source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)}({recordSymbol.Name} record){(isDerived ? " : base(record)" : "")}");
+                    source.AppendLineIndented(2, "{");
+
+                    if (!recordSymbol.IsAbstract)
+                    {
+                        source.AppendLineIndented(3, $"OriginatorRecord = record;");
+                    }
+
+                    foreach (var propertySymbol in propertySymbols)
+                    {
+                        source.AppendLineIndented(3, $"{propertySymbol.Name} = record.{propertySymbol.Name};");
+                    }
+
+                    source.AppendLineIndented(2, "}");
+                }
+
+                // Build GetRecord()
+                if (!recordSymbol.IsAbstract)
+                {
+                    source.AppendLineIndented(2, "");
+                    source.AppendLineIndented(2, "/// <summary>");
+                    source.AppendLineIndented(2, $"/// Builds a <see cref=\"{recordSymbol.Name}\"/> copying the values from this class.");
+                    source.AppendLineIndented(2, "/// </summary>");
+                    source.AppendLineIndented(2, "/// <returns></returns>");
+                    source.AppendLineIndented(2, $"public {recordSymbol.Name} GetRecord() => GetTypedRecord<{recordSymbol.Name}>(new {recordSymbol.Name}());");
+                }
+
+                // Build GetTypedRecord<T>()
+                {
+                    source.AppendLineIndented(2, "");
+                    source.AppendLineIndented(2, "/// <summary>");
+                    source.AppendLineIndented(2, $"/// Builds a record of type T copying the values from this class.");
+                    source.AppendLineIndented(2, "/// </summary>");
+                    source.AppendLineIndented(2, "/// <returns></returns>");
+                    source.AppendLineIndented(2, $"internal {(isDerived ? "override" : "virtual")} T GetTypedRecord<T>(T record)");
+                    source.AppendLineIndented(2, "{");
+
+                    if (isDerived)
+                    {
+                        source.AppendLineIndented(3, $"return (T)((base.GetTypedRecord<T>(record) as {recordSymbol.Name}) with");
+                    }
+                    else
+                    {
+                        source.AppendLineIndented(3, $"return (T)((record  as {recordSymbol.Name}) with");
+                    }
+
+                    source.AppendLineIndented(3, "{");
+
+                    foreach (var propertySymbol in propertySymbols)
+                    {
+                        source.AppendLineIndented(4, $"{propertySymbol.Name} = this.{propertySymbol.Name},");
+                    }
+
+                    source.AppendLineIndented(3, "});");
+                    source.AppendLineIndented(2, "}");
+                }
+
+                return;
+
+                // Adds a property to the companion class
+                void ProcessCompanionClassProperty(string recordName, IPropertySymbol propertySymbol)
+                {
+                    // get the name and type of the field
+                    ITypeSymbol fieldType = propertySymbol.Type;
+                    var fieldName = "_" + propertySymbol.Name.Substring(0, 1).ToLower() + propertySymbol.Name.Substring(1);
+
+                    // get the ViewModel attribute from the field, and any associated data
+                    AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
+                    TypedConstant readOnlyOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "ReadOnly").Value;
+
+                    source.AppendLineIndented(2, "");
+                    if (readOnlyOpt.IsNull || !Convert.ToBoolean(readOnlyOpt.Value))
+                    {
+                        source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
+                        source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
+                        source.AppendLineIndented(2, $"public {fieldType} {propertySymbol.Name}");
+                        source.AppendLineIndented(2, "{");
+                        source.AppendLineIndented(3, $"get => {fieldName};");
+                        source.AppendLineIndented(3, "set");
+                        source.AppendLineIndented(3, "{");
+                        source.AppendLineIndented(4, $"{fieldName} = value;");
+                        source.AppendLineIndented(4, $"//UpdatedEventHandler?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
+                        source.AppendLineIndented(3, "}");
+                        source.AppendLineIndented(2, "}");
+                    }
+                    else
+                    {
+                        source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
+                        source.AppendLineIndented(2, $"public readonly {fieldType} {propertySymbol.Name};");
+                    }
+                }
+            }
         }
 
-        private void ProcessProperty(StringBuilder source, string recordName, IPropertySymbol propertySymbol, ISymbol attributeSymbol)
-        {
-            // get the name and type of the field
-            ITypeSymbol fieldType = propertySymbol.Type;
-            var fieldName = "_" + propertySymbol.Name.Substring(0, 1).ToLower() + propertySymbol.Name.Substring(1);
-
-            // get the ViewModel attribute from the field, and any associated data
-            AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
-            TypedConstant readOnlyOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "ReadOnly").Value;
-
-            source.AppendLineIndented(2, "");
-            if (readOnlyOpt.IsNull || !Convert.ToBoolean(readOnlyOpt.Value))
-            {
-                source.AppendLineIndented(2, $"private {fieldType} {fieldName};");
-                source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
-                source.AppendLineIndented(2, $"public {fieldType} {propertySymbol.Name}");
-                source.AppendLineIndented(2, "{");
-                source.AppendLineIndented(3, $"get => {fieldName};");
-                source.AppendLineIndented(3, "set");
-                source.AppendLineIndented(3, "{");
-                source.AppendLineIndented(4, $"{fieldName} = value;");
-                source.AppendLineIndented(4, $"PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
-                source.AppendLineIndented(3, "}");
-                source.AppendLineIndented(2, "}");
-            }
-            else
-            {
-                source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{recordName}.{propertySymbol.Name}\" />");
-                source.AppendLineIndented(2, $"public readonly {fieldType} {propertySymbol.Name};");
-            }
-        }
 
         /// <summary>
         /// Created on demand before each generation pass
