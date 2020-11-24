@@ -100,7 +100,7 @@ namespace EventTest
 
             var notifier = record.GetNotifier();
             notifier.Name += "!";
-            //var x = new ViewModelBaseViewNotifier();
+            ViewModelBaseViewNotifier x;
             var createEvent = record.GetCreateObjectEvent("me!");
         }
     }
