@@ -22,7 +22,7 @@ namespace EventTest
             {
                 Id = "id",
                 UserId = "me",
-                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
+                IPAddress = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 Timestamp = DateTime.Now,
                 ObjectId = "object id",
                 PropertyName = "Name",
@@ -42,7 +42,7 @@ namespace EventTest
             var simple = new SimpleEvent()
             {
                 Id = "id",
-                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
+                IPAddress = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 UserId = "me",
                 Timestamp = DateTime.Now
             };
@@ -70,7 +70,7 @@ namespace EventTest
             CreateObjectEvent create1 = new()
             {
                 Id = "id",
-                IPAddressString = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
+                IPAddress = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 UserId = "me",
                 Timestamp = DateTime.Now,
                 TypeDiscriminator = "My Type",
@@ -100,8 +100,9 @@ namespace EventTest
 
             var notifier = record.GetNotifier();
             notifier.Name += "!";
-            ViewModelBaseViewNotifier x;
-            var createEvent = record.GetCreateObjectEvent("me!");
+            var createEvent = record.GetCreateObjectEvent();
+            var newRecord = notifier.GetRecord();
+            var createNewEvent = newRecord.GetCreateObjectEvent();
 
             MyDerived derived = new()
             {
@@ -111,6 +112,7 @@ namespace EventTest
 
             var d2 = derived.Update("Name", "new name");
             var d3 = derived.Update("Id", "new id");
+            ViewModelBaseViewNotifier x = null;
         }
 
 

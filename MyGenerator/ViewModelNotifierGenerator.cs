@@ -275,12 +275,13 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"/// Returns a <see cref=\"CreateObjectEvent\"/> populated with the details in this record.");
                     source.AppendLineIndented(2, $"/// </summary>");
                     source.AppendLineIndented(2, $"/// <returns></returns>");
-                    source.AppendLineIndented(2, $"public CreateObjectEvent GetCreateObjectEvent(string userId)");
+                    source.AppendLineIndented(2, $"public CreateObjectEvent GetCreateObjectEvent()");
                     source.AppendLineIndented(2, "{");
                     source.AppendLineIndented(3, "return new()");
                     source.AppendLineIndented(3, "{");
                     source.AppendLineIndented(4, "Id = $\"{ViewModelEvent.NewId()}\",");
-                    source.AppendLineIndented(4, "UserId = $\"{userId}\",");
+                    source.AppendLineIndented(4, "UserId = $\"\",");
+                    source.AppendLineIndented(4, "IPAddress = $\"\",");
                     source.AppendLineIndented(4, "Timestamp = DateTime.Now,");
                     source.AppendLineIndented(4, $"TypeDiscriminator = \"{discriminatorString}\",");
                     source.AppendLineIndented(4, "ObjectId = $\"{Id}\",");
@@ -357,7 +358,7 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"/// Builds a <see cref=\"{recordSymbol.Name}\"/> copying the values from this class.");
                     source.AppendLineIndented(2, "/// </summary>");
                     source.AppendLineIndented(2, "/// <returns></returns>");
-                    source.AppendLineIndented(2, $"public {recordSymbol.Name} GetRecord() => GetTypedRecord<{recordSymbol.Name}>(new {recordSymbol.Name}());");
+                    source.AppendLineIndented(2, $"public {recordSymbol.Name} GetRecord() => GetRecord(new {recordSymbol.Name}());");
                 }
 
                 // Build GetTypedRecord<T>()
@@ -367,16 +368,16 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"/// Builds a record of type T copying the values from this class.");
                     source.AppendLineIndented(2, "/// </summary>");
                     source.AppendLineIndented(2, "/// <returns></returns>");
-                    source.AppendLineIndented(2, $"internal {(isDerived ? "override" : "virtual")} T GetTypedRecord<T>(T record)");
+                    source.AppendLineIndented(2, $"internal {recordSymbol.Name} GetRecord({recordSymbol.Name} record)");//{(isDerived ? "override" : "virtual")} 
                     source.AppendLineIndented(2, "{");
 
                     if (isDerived)
                     {
-                        source.AppendLineIndented(3, $"return (T)((base.GetTypedRecord<T>(record) as {recordSymbol.Name}) with");
+                        source.AppendLineIndented(3, $"return (base.GetRecord(record) as {recordSymbol.Name}) with");
                     }
                     else
                     {
-                        source.AppendLineIndented(3, $"return (T)((record  as {recordSymbol.Name}) with");
+                        source.AppendLineIndented(3, $"return (record  as {recordSymbol.Name}) with");
                     }
 
                     source.AppendLineIndented(3, "{");
@@ -386,7 +387,7 @@ namespace Vectis.Generator
                         source.AppendLineIndented(4, $"{propertySymbol.Name} = this.{propertySymbol.Name},");
                     }
 
-                    source.AppendLineIndented(3, "});");
+                    source.AppendLineIndented(3, "};");
                     source.AppendLineIndented(2, "}");
                 }
 

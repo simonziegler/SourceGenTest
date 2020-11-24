@@ -32,7 +32,7 @@ namespace Vectis.Events
         /// The event's timestamp. Use <see cref="TimestampUTC"/> for event timing comparison.
         /// </summary>
         [MessagePack.Key(2)]
-        public IPAddress IPAddress { get; init; }
+        public string IPAddress { get; init; }
 
 
         /// <summary>
@@ -40,15 +40,6 @@ namespace Vectis.Events
         /// </summary>
         [MessagePack.Key(3)]
         public DateTime Timestamp { get; init; }
-
-
-        /// <summary>
-        /// <see cref="Timestamp"/> converted to UTC. Use this for event timing comparison.
-        /// </summary>
-        [Newtonsoft.Json.JsonIgnore]
-        [System.Text.Json.Serialization.JsonIgnore]
-        [MessagePack.IgnoreMember]
-        public string IPAddressString { get => IPAddress.ToString(); init => IPAddress.Parse(value); }
 
 
         /// <summary>
