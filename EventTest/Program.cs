@@ -9,7 +9,7 @@ namespace EventTest
     class Program
     {
         [MessagePack.MessagePackObject]
-        public record SimpleEvent : Event
+        public record SimpleEvent : ViewModelEvent
         {
             public SimpleEvent() { }
         }
@@ -102,6 +102,44 @@ namespace EventTest
             notifier.Name += "!";
             ViewModelBaseViewNotifier x;
             var createEvent = record.GetCreateObjectEvent("me!");
+
+            MyDerived derived = new()
+            {
+                Id = "id",
+                Name = "name"
+            };
+
+            var d2 = derived.Update("Name", "new name");
+            var d3 = derived.Update("Id", "new id");
+        }
+
+
+        public abstract record MyBase
+        {
+            public string Id { get; init; }
+
+            public virtual MyBase Update(string property, string value)
+            {
+                return property switch
+                {
+                    "Id" => this with { Id = value },
+                    _ => throw new Exception()
+                };
+            }
+        }
+
+        public record MyDerived : MyBase
+        {
+            public string Name { get; init; }
+
+            public override MyDerived Update(string property, string value)
+            {
+                return property switch
+                {
+                    "Name" => this with { Name = value },
+                    _ => base.Update(property, value) as MyDerived
+                };
+            }
         }
     }
 }

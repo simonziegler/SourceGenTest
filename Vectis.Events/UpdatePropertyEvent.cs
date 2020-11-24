@@ -5,7 +5,7 @@
     /// converted to relevant values by the receiving object.
     /// </summary>
     [MessagePack.MessagePackObject]
-    public record UpdatePropertyEvent : Event
+    public record UpdatePropertyEvent : ViewModelEvent
     {
         /// <summary>
         /// The id of the object to be updated by this event.

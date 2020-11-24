@@ -6,7 +6,7 @@ namespace Vectis.Events
     /// A general purpose event base class.
     /// </summary>
     [MessagePack.Union(0, typeof(UpdatePropertyEvent))]
-    public abstract record Event
+    public abstract record ViewModelEvent
     {
         /// <summary>
         /// The event's partition key for Cosmos DB.
@@ -57,7 +57,7 @@ namespace Vectis.Events
         /// <param name="userId"></param>
         /// <param name="timestamp"></param>
         //public Event(string partitionKey, string id, string userId, DateTime timestamp) => (PartitionKey, Id, UserId, Timestamp) = (partitionKey, id, userId, timestamp);
-        public Event() { }
+        public ViewModelEvent() { }
 
 
         /// <summary>

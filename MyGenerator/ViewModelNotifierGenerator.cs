@@ -252,7 +252,7 @@ namespace Vectis.Generator
                 source.AppendLineIndented(2, "{");
                 source.AppendLineIndented(3, "return new()");
                 source.AppendLineIndented(3, "{");
-                source.AppendLineIndented(4, "Id = $\"{Event.NewId()}\",");
+                source.AppendLineIndented(4, "Id = $\"{ViewModelEvent.NewId()}\",");
                 source.AppendLineIndented(4, "UserId = $\"{userId}\",");
                 source.AppendLineIndented(4, "Timestamp = DateTime.Now,");
                 source.AppendLineIndented(4, $"TypeDiscriminator = \"{discriminatorString}\",");

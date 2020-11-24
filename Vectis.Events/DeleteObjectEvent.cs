@@ -5,7 +5,7 @@
     /// </summary>
     /// <typeparam name="T"></typeparam>
     [MessagePack.MessagePackObject]
-    public record DeleteObjectEvent : Event
+    public record DeleteObjectEvent : ViewModelEvent
     {
         /// <summary>
         /// The id of the object to be updated by this event.

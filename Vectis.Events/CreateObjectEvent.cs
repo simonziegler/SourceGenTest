@@ -8,7 +8,7 @@ namespace Vectis.Events
     /// An event that creates a new object with the specified values.
     /// </summary>
     [MessagePack.MessagePackObject]
-    public record CreateObjectEvent : Event
+    public record CreateObjectEvent : ViewModelEvent
     {
         /// <summary>
         /// A property/value pair.
