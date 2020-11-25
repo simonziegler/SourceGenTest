@@ -1,4 +1,5 @@
-﻿using Vectis.Generator;
+﻿using System.ComponentModel.DataAnnotations;
+using Vectis.Generator;
 
 namespace EventTest
 {
@@ -12,8 +13,8 @@ namespace EventTest
         /// <summary>
         /// The scheme's name.
         /// </summary>
-        //[Display(Name = "Development Name", Prompt = "Enter a name for the development")]
-        [MessagePack.Key(1)]
+        [Display(Name = "Development Name", Prompt = "Enter a name for the development")]
+        [MessagePack.Key(3)]
         [ViewModel]
         public string Name { get; init; }
 
@@ -21,9 +22,9 @@ namespace EventTest
         /// <summary>
         /// The scheme's description.
         /// </summary>
-        //[Required, MinLength(1)]
-        //[Display(Name = "Description", Prompt = "A description is required - you can use Markdown formatting")]
-        [MessagePack.Key(2)]
+        [Required, MinLength(1)]
+        [Display(Name = "Description", Prompt = "A description is required - you can use Markdown formatting")]
+        [MessagePack.Key(4)]
         [ViewModel]
         public string Description { get; init; }
 
@@ -31,16 +32,17 @@ namespace EventTest
         /// <summary>
         /// The id of the borrower's <see cref="Entity"/>.
         /// </summary>
-        [MessagePack.Key(3)]
+        [MessagePack.Key(5)]
         [ViewModel]
         public string BorrowerEntityId { get; init; }
+
 
         /// <summary>
         /// The period in months for VAT reclamation - usually set by a borrower at one or two depending upon their accountancy process.
         /// </summary>
-        //[Display(Name = "VAT Reclaim Months", Prompt = "The number of months between VAT being charged and reclaimed on costs")]
-        //[Range(0, 120, ErrorMessage = "VAT reclaim period must be from 0 to 120 months")]
-        [MessagePack.Key(4)]
+        [Display(Name = "VAT Reclaim Months", Prompt = "The number of months between VAT being charged and reclaimed on costs")]
+        [Range(0, 120, ErrorMessage = "VAT reclaim period must be from 0 to 120 months")]
+        [MessagePack.Key(6)]
         [ViewModel]
         public int VatReclaimMonths { get; init; }
     }

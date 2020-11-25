@@ -230,7 +230,7 @@ namespace Vectis.Generator
                     source.AppendLineIndented(1, leadingComment);
                 }
 
-                source.AppendLineIndented(1, $"public partial record {recordSymbol.Name}");
+                source.AppendLineIndented(1, $"public {(recordSymbol.IsAbstract ? "abstract " : "")}partial record {recordSymbol.Name}");
                 source.AppendLineIndented(1, "{");
 
                 // Build GetPropertyValuePairs()
@@ -239,7 +239,7 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"/// Returns a list of <see cref=\"CreateObjectEvent.PropertyValuePair\"/> for each property of the record.");
                     source.AppendLineIndented(2, $"/// </summary>");
                     source.AppendLineIndented(2, $"/// <returns></returns>");
-                    source.AppendLineIndented(2, $"internal {(isDerived ? "override" : "virtual")} List<CreateObjectEvent.PropertyValuePair> GetPropertyValuePairs()");
+                    source.AppendLineIndented(2, $"private protected {(isDerived ? "override" : "virtual")} List<CreateObjectEvent.PropertyValuePair> GetPropertyValuePairs()");
                     source.AppendLineIndented(2, "{");
                     source.AppendLineIndented(3, "List<CreateObjectEvent.PropertyValuePair> properties = new();");
 
@@ -254,6 +254,57 @@ namespace Vectis.Generator
                     }
 
                     source.AppendLineIndented(3, "return properties;");
+                    source.AppendLineIndented(2, "}");
+                }
+
+                // Build ApplyUpdatePropertyEvent()
+                {
+                    source.AppendLineIndented(2, "");
+                    source.AppendLineIndented(2, $"/// <summary>");
+                    source.AppendLineIndented(2, $"/// Applies an <see cref=\"UpdatePropertyEvent\" /> returning a new a record.");
+                    source.AppendLineIndented(2, $"/// </summary>");
+                    source.AppendLineIndented(2, "/// <param name=\"updatePropertyEvent\"></param>");
+                    source.AppendLineIndented(2, $"/// <returns></returns>");
+                    source.AppendLineIndented(2, $"public {(isDerived ? "override" : "virtual")} ViewModelBase ApplyUpdatePropertyEvent(UpdatePropertyEvent updatePropertyEvent) => ApplyUpdatePropertyEvent(updatePropertyEvent, \"{recordSymbol.Name}\");");
+                }
+
+                // Build ApplyUpdatePropertyEvent(UpdatePropertyEvent updatePropertyEvent, string recordName)
+                {
+                    source.AppendLineIndented(2, "");
+                    source.AppendLineIndented(2, $"/// <summary>");
+                    source.AppendLineIndented(2, $"/// Applies an <see cref=\"UpdatePropertyEvent\" /> returning a new a record.");
+                    source.AppendLineIndented(2, $"/// </summary>");
+                    source.AppendLineIndented(2, "/// <param name=\"updatePropertyEvent\"></param>");
+                    source.AppendLineIndented(2, "/// <param name=\"recordName\"></param>");
+                    source.AppendLineIndented(2, $"/// <returns></returns>");
+                    source.AppendLineIndented(2, $"private protected {(isDerived ? "override" : "virtual")} ViewModelBase ApplyUpdatePropertyEvent(UpdatePropertyEvent updatePropertyEvent, string recordName)");
+                    source.AppendLineIndented(2, "{");
+                    source.AppendLineIndented(3, $"var source = this{(isDerived ? "" : " with { EventId = updatePropertyEvent.Id }")};");
+                    source.AppendLineIndented(3, "");
+                    source.AppendLineIndented(3, "return updatePropertyEvent.PropertyName.ToLower() switch");
+                    source.AppendLineIndented(3, "{");
+
+                    foreach (var propertySymbol in propertySymbols)
+                    {
+                        AttributeData attributeData = propertySymbol.GetAttributes().Single(ad => ad.AttributeClass.Equals(attributeSymbol, SymbolEqualityComparer.Default));
+                        TypedConstant readOnlyOpt = attributeData.NamedArguments.SingleOrDefault(kvp => kvp.Key == "ReadOnly").Value;
+
+                        if (readOnlyOpt.IsNull || !Convert.ToBoolean(readOnlyOpt.Value))
+                        {
+                            source.AppendLineIndented(4, $"\"{propertySymbol.Name.ToLower()}\" => source with {{ {propertySymbol.Name} = {GetPropertyUpdateSetter(propertySymbol, "updatePropertyEvent.NextValue")} }},");
+                        }
+                    }
+
+                    if (isDerived)
+                    {
+                        source.AppendLineIndented(4, "_ => base.ApplyUpdatePropertyEvent(updatePropertyEvent, recordName),");
+                    }
+                    else
+                    {
+                        source.AppendLineIndented(4, $"_ => throw new Exception($\"Cannot set property '{{updatePropertyEvent.PropertyName}}' on record of type '{{recordName}}'\"),");
+                    }
+
+                    source.AppendLineIndented(3, "};");
                     source.AppendLineIndented(2, "}");
                 }
 
@@ -305,23 +356,32 @@ namespace Vectis.Generator
                 if (!isDerived)
                 {
                     source.AppendLineIndented(2, "/// <summary>");
-                    source.AppendLineIndented(2, "/// The method that will handle an event raised by the view model in response to a property being updated.");
+                    source.AppendLineIndented(2, "/// Represents method that will handle the <see cref=\"PropertyUpdated\"/> event raised by the view model in response to a property being updated.");
                     source.AppendLineIndented(2, "/// </summary>");
                     source.AppendLineIndented(2, "/// <param name=\"sender\"></param>");
                     source.AppendLineIndented(2, "/// <param name=\"e\"></param>");
-                    source.AppendLineIndented(2, "public delegate void UpdatedEventHandler(object sender, ViewModelEvent e);");
-
+                    source.AppendLineIndented(2, "public delegate void UpdatedPropertyEventHandler(object sender, ViewModelEvent e);");
                 }
 
-                // Add a copy of the originator record only if this is a non-abstract class
+                if (!recordSymbol.IsAbstract)
                 {
-                    if (!recordSymbol.IsAbstract)
+                    source.AppendLineIndented(2, "/// <summary>");
+                    source.AppendLineIndented(2, "/// Occurs when a property is updated.");
+                    source.AppendLineIndented(2, "/// </summary>");
+                    source.AppendLineIndented(2, "/// <param name=\"sender\"></param>");
+                    source.AppendLineIndented(2, "/// <param name=\"e\"></param>");
+                    source.AppendLineIndented(2, "public event UpdatedPropertyEventHandler PropertyUpdated;");
+                }
+
+                // Add properties, including a copy of the originator record only if this is a non-abstract class
+                {
+                    if (!isDerived)
                     {
                         source.AppendLineIndented(2, "");
                         source.AppendLineIndented(2, "/// <summary>");
                         source.AppendLineIndented(2, $"/// The backing <see cref=\"{recordSymbol.Name}\"/> from which this object was created.");
                         source.AppendLineIndented(2, "/// </summary>");
-                        source.AppendLineIndented(2, $"public readonly {recordSymbol.Name} OriginatorRecord;");
+                        source.AppendLineIndented(2, $"public readonly ViewModelBase OriginatorRecord;");
                     }
 
                     // Create companion properties for each of the base record's fields
@@ -337,7 +397,7 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"public {GetNotifierClassName(recordSymbol.Name)}({recordSymbol.Name} record){(isDerived ? " : base(record)" : "")}");
                     source.AppendLineIndented(2, "{");
 
-                    if (!recordSymbol.IsAbstract)
+                    if (!isDerived)
                     {
                         source.AppendLineIndented(3, $"OriginatorRecord = record;");
                     }
@@ -368,7 +428,7 @@ namespace Vectis.Generator
                     source.AppendLineIndented(2, $"/// Builds a record of type T copying the values from this class.");
                     source.AppendLineIndented(2, "/// </summary>");
                     source.AppendLineIndented(2, "/// <returns></returns>");
-                    source.AppendLineIndented(2, $"internal {recordSymbol.Name} GetRecord({recordSymbol.Name} record)");//{(isDerived ? "override" : "virtual")} 
+                    source.AppendLineIndented(2, $"private protected {recordSymbol.Name} GetRecord({recordSymbol.Name} record)");//{(isDerived ? "override" : "virtual")} 
                     source.AppendLineIndented(2, "{");
 
                     if (isDerived)
@@ -414,8 +474,12 @@ namespace Vectis.Generator
                         source.AppendLineIndented(3, $"get => {fieldName};");
                         source.AppendLineIndented(3, "set");
                         source.AppendLineIndented(3, "{");
-                        source.AppendLineIndented(4, $"{fieldName} = value;");
-                        source.AppendLineIndented(4, $"//UpdatedEventHandler?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertySymbol.Name})));");
+                        source.AppendLineIndented(4, $"if ({fieldName} != value)");
+                        source.AppendLineIndented(4, "{");
+                        source.AppendLineIndented(5, $"var updatePropertyEvent = OriginatorRecord.BuildUpdatePropertyEvent(\"{propertySymbol.Name}\", {fieldName}, value);");
+                        source.AppendLineIndented(5, $"{fieldName} = value;");
+                        source.AppendLineIndented(5, $"PropertyUpdated?.Invoke(this, updatePropertyEvent);");
+                        source.AppendLineIndented(4, "}");
                         source.AppendLineIndented(3, "}");
                         source.AppendLineIndented(2, "}");
                     }
@@ -457,6 +521,35 @@ namespace Vectis.Generator
         /// <param name="recordName"></param>
         /// <returns></returns>
         public static string GetNotifierClassName(string recordName) => recordName + "ViewNotifier";
+
+
+        /// <summary>
+        /// Returns the class name for the view notifier associated with a view model record.
+        /// </summary>
+        /// <param name="recordName"></param>
+        /// <returns></returns>
+        public static string GetPropertyUpdateSetter(IPropertySymbol propertySymbol, string propertyName)
+        {
+            var typeName = propertySymbol.Type.Name;
+
+            if (typeName == "String") return propertyName;
+            return $"Convert.To{typeName}({propertyName})";
+
+            //if (typeName == "Boolean") return $"Convert.ToBoolean({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToByte({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToChar({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToDateTime({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToDecimal({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToDouble({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToInt16({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToInt64({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToSByte({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToFloat({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToUInt16({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToUInt32({propertyName})";
+            //if (typeName == "Boolean") return $"Convert.ToUInt64({propertyName})";
+            //return propertyName;
+        }
     }
 }
 

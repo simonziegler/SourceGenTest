@@ -8,20 +8,6 @@
     public record UpdatePropertyEvent : ViewModelEvent
     {
         /// <summary>
-        /// The id of the object to be updated by this event.
-        /// </summary>
-        [MessagePack.Key(4)]
-        public string ObjectId { get; init; }
-
-
-        /// <summary>
-        /// The id of the previous event. For future use in concurrency/validity checking.
-        /// </summary>
-        [MessagePack.Key(5)]
-        public string PreviousEventId { get; init; }
-
-
-        /// <summary>
         /// Name of the property being updated.
         /// </summary>
         [MessagePack.Key(6)]

@@ -39,16 +39,9 @@ namespace Vectis.Events
 
 
         /// <summary>
-        /// The id of the object to be updated by this event.
-        /// </summary>
-        [MessagePack.Key(5)]
-        public string ObjectId { get; init; }
-
-
-        /// <summary>
         /// Immutable list of properties
         /// </summary>
-        [MessagePack.Key(6)]
+        [MessagePack.Key(5)]
         public string PropertiesString { get; init; } = "";
 
 
@@ -91,7 +84,7 @@ namespace Vectis.Events
 
                 foreach (var pair in value)
                 {
-                    elements.Add($"\"{pair.PropertyName}\",\"{pair.Value}\"");
+                    elements.Add($"\"{pair.PropertyName}\",\"{pair.Value.Replace("\"", "\\\"")}\"");
                 }
 
                 PropertiesString = string.Join(",", elements);

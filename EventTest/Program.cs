@@ -1,6 +1,7 @@
 ﻿using MessagePack;
 using MessagePack.Resolvers;
 using System;
+using System.Diagnostics;
 using System.Text;
 using Vectis.Events;
 
@@ -20,7 +21,7 @@ namespace EventTest
 
             var update1 = new UpdatePropertyEvent()
             {
-                Id = "id",
+                Id = "update1 id",
                 UserId = "me",
                 IPAddress = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
                 Timestamp = DateTime.Now,
@@ -30,8 +31,8 @@ namespace EventTest
                 NextValue = "It's me"
             };
 
-            var update2 = update1;
-            var update3 = update1 with { NextValue = "asdf" };
+            var update1a = update1;
+            var update1b = update1 with { NextValue = "asdf" };
 
             var jsonNS = Newtonsoft.Json.JsonConvert.SerializeObject(update1);
             var jsonSTJ = System.Text.Json.JsonSerializer.Serialize(update1);
@@ -92,56 +93,43 @@ namespace EventTest
             var record = new SchemeRecord()
             {
                 Id = "scheme id",
+                EventId = "first event id",
                 Name = "Bournemouth",
                 Description = "A description",
-                BorrowerEntityId = "borrower id",
+                BorrowerEntityId = "borrower \"quoted\" id",
                 VatReclaimMonths = 1
             };
 
             var notifier = record.GetNotifier();
+            notifier.PropertyUpdated += UpdateReceiver;
             notifier.Name += "!";
             var createEvent = record.GetCreateObjectEvent();
             var newRecord = notifier.GetRecord();
             var createNewEvent = newRecord.GetCreateObjectEvent();
 
-            MyDerived derived = new()
+            ViewModelBaseViewNotifier x = null;
+
+            var update2 = new UpdatePropertyEvent()
             {
-                Id = "id",
-                Name = "name"
+                Id = "update2 id",
+                UserId = "me",
+                IPAddress = "2a00:23c5:82a:cd01:485c:a018:8ef5:b3c3",
+                Timestamp = DateTime.Now,
+                ObjectId = "object id",
+                PropertyName = "VatReclaimMonths",
+                PreviousValue = "",
+                NextValue = "2"
             };
 
-            var d2 = derived.Update("Name", "new name");
-            var d3 = derived.Update("Id", "new id");
-            ViewModelBaseViewNotifier x = null;
-        }
-
-
-        public abstract record MyBase
-        {
-            public string Id { get; init; }
-
-            public virtual MyBase Update(string property, string value)
+            var record1 = record.ApplyUpdatePropertyEvent(update1);
+            var record2 = record.ApplyUpdatePropertyEvent(update2);
+            
+            void UpdateReceiver(object sender, ViewModelEvent viewModelEvent)
             {
-                return property switch
-                {
-                    "Id" => this with { Id = value },
-                    _ => throw new Exception()
-                };
+                Console.WriteLine(viewModelEvent);
             }
         }
 
-        public record MyDerived : MyBase
-        {
-            public string Name { get; init; }
 
-            public override MyDerived Update(string property, string value)
-            {
-                return property switch
-                {
-                    "Name" => this with { Name = value },
-                    _ => base.Update(property, value) as MyDerived
-                };
-            }
-        }
     }
 }
