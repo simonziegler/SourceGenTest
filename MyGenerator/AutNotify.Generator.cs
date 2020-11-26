@@ -94,15 +94,15 @@ namespace AutoNotify
 
             // begin building the generated source
             StringBuilder source = new StringBuilder();
-            source.AppendLineIndented(0, $"namespace {namespaceName}");
-            source.AppendLineIndented(0, "{");
-            source.AppendLineIndented(1, $"public partial class {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
-            source.AppendLineIndented(1, "{");
+            source.AppendLinesIndented(0, $"namespace {namespaceName}");
+            source.AppendLinesIndented(0, "{");
+            source.AppendLinesIndented(1, $"public partial class {classSymbol.Name} : {notifySymbol.ToDisplayString()}");
+            source.AppendLinesIndented(1, "{");
 
             // if the class doesn't implement INotifyPropertyChanged already, add it
             if (!classSymbol.Interfaces.Contains(notifySymbol))
             {
-                source.AppendLineIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
+                source.AppendLinesIndented(2, "public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;");
             }
 
             // create properties for each field 
@@ -111,8 +111,8 @@ namespace AutoNotify
                 ProcessField(source, fieldSymbol, attributeSymbol);
             }
 
-            source.AppendLineIndented(1, "}");
-            source.AppendLineIndented(0, "}");
+            source.AppendLinesIndented(1, "}");
+            source.AppendLinesIndented(0, "}");
             
             return source.ToString();
         }
@@ -134,17 +134,17 @@ namespace AutoNotify
                 return;
             }
 
-            source.AppendLineIndented(2, "");
-            source.AppendLineIndented(2, $"/// <inheritdoc cref=\"{fieldName}\" />");
-            source.AppendLineIndented(2, $"public {fieldType} {propertyName}");
-            source.AppendLineIndented(2, "{");
-            source.AppendLineIndented(3, $"get => this.{fieldName};");
-            source.AppendLineIndented(3, "set");
-            source.AppendLineIndented(3, "{");
-            source.AppendLineIndented(4, $"this.{fieldName} = value;");
-            source.AppendLineIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));");
-            source.AppendLineIndented(3, "}");
-            source.AppendLineIndented(2, "}");
+            source.AppendLinesIndented(2, "");
+            source.AppendLinesIndented(2, $"/// <inheritdoc cref=\"{fieldName}\" />");
+            source.AppendLinesIndented(2, $"public {fieldType} {propertyName}");
+            source.AppendLinesIndented(2, "{");
+            source.AppendLinesIndented(3, $"get => this.{fieldName};");
+            source.AppendLinesIndented(3, "set");
+            source.AppendLinesIndented(3, "{");
+            source.AppendLinesIndented(4, $"this.{fieldName} = value;");
+            source.AppendLinesIndented(4, $"this.PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof({propertyName})));");
+            source.AppendLinesIndented(3, "}");
+            source.AppendLinesIndented(2, "}");
 
             string ChooseName()
             {

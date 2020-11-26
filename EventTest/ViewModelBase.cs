@@ -3,6 +3,7 @@ using Vectis.Generator;
 
 namespace EventTest
 {
+    [PolymorphicRecord]
     public abstract partial record ViewModelBase
     {
         /// <summary>

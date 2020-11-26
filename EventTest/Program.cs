@@ -107,6 +107,8 @@ namespace EventTest
             var newRecord = notifier.GetRecord();
             var createNewEvent = newRecord.GetCreateObjectEvent();
 
+            var newNewRecord = ViewModelBase.ApplyCreateObjectEvent(createNewEvent);
+
             ViewModelBaseViewNotifier x = null;
 
             var update2 = new UpdatePropertyEvent()
@@ -129,7 +131,5 @@ namespace EventTest
                 Console.WriteLine(viewModelEvent);
             }
         }
-
-
     }
 }

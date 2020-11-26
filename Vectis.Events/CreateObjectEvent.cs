@@ -60,14 +60,14 @@ namespace Vectis.Events
                     return Array.Empty<PropertyValuePair>();
                 }
 
-                Regex parser = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
+                Regex parser = new(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))");
                 var fields = parser.Split(PropertiesString);
                 
                 List<PropertyValuePair> elements = new();
 
                 for (int i = 0; i < fields.Length; i += 2)
                 {
-                    elements.Add(new PropertyValuePair() { PropertyName = fields[i], Value = fields[i + 1] });
+                    elements.Add(new PropertyValuePair() { PropertyName = fields[i][1..^1], Value = fields[i + 1][1..^1].Replace("\\\"", "\"") });
                 }
 
                 return elements.ToArray();
